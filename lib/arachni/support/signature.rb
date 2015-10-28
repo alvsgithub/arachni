@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -13,6 +13,10 @@ module Arachni::Support
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
 class Signature
+
+    CACHE = {
+        tokens: Cache::LeastRecentlyPushed.new( 100 )
+    }
 
     attr_reader :tokens
 
@@ -109,14 +113,19 @@ class Signature
     #   hashes, depending on which is smaller in size.
     def tokenize( data )
         return data.tokens if data.is_a? self.class
-        compress data.split( /(?![\w])/ )
+
+        if CACHE[:tokens][data]
+            CACHE[:tokens][data].dup
+        else
+            CACHE[:tokens][data] = compress( data.split( /(?![\w])/ ) )
+        end
     end
 
     # Compresses the tokens by only storing unique #hash values.
     # Seems kinda silly but this can actually save us GB of RAM when comparing
     # large signatures, not to mention CPU cycles.
     def compress( tokens )
-        tokens.uniq.map(&:hash)
+        Set.new( tokens.map(&:hash) )
     end
 
 end

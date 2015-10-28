@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -21,8 +21,7 @@ module Browser
     #   {OptionGroups::Scope#dom_depth_limit} are 0 or not
     #   {#host_has_browser?}.
     def browser_cluster
-        return if options.browser_cluster.pool_size == 0 ||
-            Options.scope.dom_depth_limit == 0 || !host_has_browser?
+        return if !use_browsers?
 
         # Initialization may take a while so since we lazy load this make sure
         # that only one thread gets to this code at a time.
@@ -31,8 +30,16 @@ module Browser
                 state.set_status_message :browser_cluster_startup
             end
 
-            @browser_cluster ||= BrowserCluster.new
+            @browser_cluster ||= BrowserCluster.new(
+                on_pop: proc do
+                    next if !pause?
+
+                    print_debug 'Blocking browser cluster on pop.'
+                    wait_if_paused
+                end
+            )
             state.clear_status_messages
+
             @browser_cluster
         end
     end
@@ -43,13 +50,19 @@ module Browser
         Arachni::Browser.has_executable?
     end
 
-    def wait_for_browser?
+    def wait_for_browser_cluster?
         @browser_cluster && !browser_cluster.done?
     end
 
-    def browser_job_skip_states
+    # @private
+    def browser_cluster_job_skip_states
         return if !@browser_cluster
         browser_cluster.skip_states( browser_job.id )
+    end
+
+    def use_browsers?
+        options.browser_cluster.pool_size > 0 &&
+            options.scope.dom_depth_limit > 0 && host_has_browser?
     end
 
     private
@@ -77,21 +90,12 @@ module Browser
         synchronize do
             return if !push_to_page_queue page
 
-            pushed_paths = nil
-            if crawl?
-                pushed_paths = push_paths_from_page( page ).size
-            end
-
             print_status "Got new page from the browser-cluster: #{page.dom.url}"
             print_info "DOM depth: #{page.dom.depth} (Limit: #{options.scope.dom_depth_limit})"
 
             if page.dom.transitions.any?
                 print_info '  Transitions:'
                 page.dom.print_transitions( method(:print_info), '    ' )
-            end
-
-            if pushed_paths
-                print_info "  -- Analysis resulted in #{pushed_paths} usable paths."
             end
         end
     end
@@ -106,11 +110,50 @@ module Browser
             Options.scope.dom_depth_limit.to_i < page.dom.depth + 1 ||
             !page.has_script?
 
-        browser_cluster.queue( browser_job.forward( resource: page ) ) do |response|
-            handle_browser_page response.page
+        # We need to schedule a separate job for applying metadata because it
+        # needs to have a clean state.
+        schedule_dom_metadata_application( page )
+
+        browser_cluster.queue( browser_job.forward( resource: page ) ) do |result|
+            handle_browser_page result.page
         end
 
         true
+    end
+
+    def schedule_dom_metadata_application( page )
+        return if page.dom.depth > 0
+        return if page.metadata.map { |_, data| data['skip_dom'].values }.
+            flatten.compact.any?
+
+        # This optimization only affects Form & Cookie DOM elements,
+        # so don't bother if none of the checks are interested in them.
+        return if !checks.values.
+            find { |c| c.check? page, [Element::Form::DOM, Element::Cookie::DOM], true }
+
+        page.clear_cache
+
+        browser_cluster.with_browser do |browser|
+            apply_dom_metadata( browser, page )
+        end
+    end
+
+    def apply_dom_metadata( browser, page )
+        bp = nil
+
+        begin
+            bp = browser.load( page ).to_page
+        rescue Selenium::WebDriver::Error::WebDriverError,
+            Watir::Exception::Error => e
+            print_debug "Could not apply metadata to '#{page.dom.url}'" <<
+                            " because: #{e} [#{e.class}"
+            return
+        end
+
+        # Request timeout or some other failure...
+        return if bp.code == 0
+
+        handle_browser_page bp
     end
 
     def browser_job

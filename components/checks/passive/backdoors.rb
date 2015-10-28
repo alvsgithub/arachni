@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -25,11 +25,12 @@ class Arachni::Checks::Backdoors < Arachni::Check::Base
 
     def self.info
         {
-            name:        'Backdoors',
-            description: %q{Tries to find common backdoors on the server.},
-            elements:    [Element::Server],
-            author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com> ',
-            version:     '0.2.3',
+            name:             'Backdoors',
+            description:      %q{Tries to find common backdoors on the server.},
+            elements:         [Element::Server],
+            author:           'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com> ',
+            version:          '0.2.5',
+            exempt_platforms: Arachni::Platform::Manager::FRAMEWORKS,
 
             issue:       {
                 name:            %q{A backdoor file exists on the server},

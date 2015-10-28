@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -26,7 +26,7 @@ class OptionParser < UI::CLI::OptionParser
     end
 
     def authorized_by
-        on( '--authorized-by EMAIL_ADDRESS', Integer,
+        on( '--authorized-by EMAIL_ADDRESS',
                'E-mail address of the person who authorized the scan.',
                "(It'll make it easier on the sys-admins during log reviews.)",
                "(Will be used as a value for the 'From' HTTP request header.)"
@@ -138,8 +138,8 @@ class OptionParser < UI::CLI::OptionParser
 
         on( '--scope-url-rewrite PATTERN:SUBSTITUTION',
             'Rewrite URLs based on the given PATTERN and SUBSTITUTION.',
-            'To convert:  http://test.com/articles/some-stuff/23 to http://test.com/articles.php?id=23',
-            'Use:         /articles\/[\w-]+\/(\d+)/:articles.php?id=\1'
+            'To convert:  http://example.com/articles/some-stuff/23 to http://example.com/articles.php?id=23',
+            'Use:         articles/[\w-]+/(\d+):articles.php?id=\1'
         ) do |rule|
             pattern, substitution = rule.split( ':', 2 )
             options.scope.url_rewrites[ Regexp.new( pattern ) ] =
@@ -191,13 +191,42 @@ class OptionParser < UI::CLI::OptionParser
         on( '--audit-link-template TEMPLATE', Regexp,
             'Regular expression with named captures to use to extract input information from generic paths.',
             "To extract the 'input1' and 'input2' inputs from:",
-            '  http://test.com/input1/value1/input2/value2',
+            '  http://example.com/input1/value1/input2/value2',
             'Use:',
-            '  /input1\/(?<input1>\w+)\/input2\/(?<input2>\w+)/',
+            '  input1/(?<input1>\w+)/input2/(?<input2>\w+)',
             '(Can be used multiple times.)'
         ) do |pattern|
             # We merge this way to enforce validation from the options group.
             options.audit.link_templates |= [pattern]
+        end
+
+        on( '--audit-jsons', 'Audit JSON request inputs.' ) do
+            options.audit.jsons = true
+        end
+
+        on( '--audit-xmls', 'Audit XML request inputs.' ) do
+            options.audit.xmls = true
+        end
+
+        on( '--audit-ui-inputs', 'Audit orphan Input elements with events.' ) do
+            options.audit.ui_inputs = true
+        end
+
+        on( '--audit-ui-forms', 'Audit UI Forms.',
+            'Input and button groups that do not belong to a parent <form> element.' ) do
+            options.audit.ui_forms = true
+        end
+
+        on( '--audit-parameter-names',
+            'Inject payloads into parameter names.'
+        ) do
+            options.audit.parameter_names = true
+        end
+
+        on( '--audit-with-extra-parameter',
+            'Inject payloads into extra element parameters.'
+        ) do
+            options.audit.with_extra_parameter = true
         end
 
         on( '--audit-with-both-methods',
@@ -273,7 +302,7 @@ class OptionParser < UI::CLI::OptionParser
 
         on( '--http-response-max-size LIMIT', Integer,
                'Do not download response bodies larger than the specified LIMIT, in bytes.',
-               '(Default: inf)'
+               "(Default: #{options.http.response_max_size})"
         ) do |size|
             options.http.response_max_size = size
         end
@@ -315,6 +344,58 @@ class OptionParser < UI::CLI::OptionParser
                'Proxy type.', '(Default: auto)'
         ) do |type|
             options.http.proxy_type = type
+        end
+
+        on( '--http-ssl-verify-peer', 'Verify SSL peer.', '(Default: false)' ) do
+            options.http.ssl_verify_peer = true
+        end
+
+        on( '--http-ssl-verify-host', 'Verify SSL host.', '(Default: false)' ) do
+            options.http.ssl_verify_host = true
+        end
+
+        on( '--http-ssl-certificate PATH', 'SSL certificate to use.' ) do |file|
+            options.http.ssl_certificate_filepath = file
+        end
+
+        on( "--http-ssl-certificate-type #{OptionGroups::HTTP::SSL_CERTIFICATE_TYPES.join(',')}",
+            OptionGroups::HTTP::SSL_CERTIFICATE_TYPES,
+            'SSL certificate type.'
+        ) do |type|
+            options.http.ssl_certificate_type = type
+        end
+
+        on( '--http-ssl-key PATH', 'SSL private key to use.' ) do |file|
+            options.http.ssl_key_filepath = file
+        end
+
+        on( "--http-ssl-key-type #{OptionGroups::HTTP::SSL_KEY_TYPES.join(',')}",
+            OptionGroups::HTTP::SSL_KEY_TYPES,
+            'SSL key type.'
+        ) do |type|
+            options.http.ssl_key_type = type
+        end
+
+        on( '--http-ssl-key-password PASSWORD',
+            'Password for the SSL private key.' ) do |pass|
+            options.http.ssl_key_password = pass
+        end
+
+        on( '--http-ssl-ca PATH',
+            'File holding one or more certificates with which to verify the peer.' ) do |file|
+            options.http.ssl_ca_filepath = file
+        end
+
+        on( '--http-ssl-ca-directory PATH',
+            'Directory holding multiple certificate files with which to verify the peer.' ) do |path|
+            options.http.ssl_ca_directory = path
+        end
+
+        on( "--http-ssl-version #{OptionGroups::HTTP::SSL_VERSIONS.join(',')}",
+            OptionGroups::HTTP::SSL_VERSIONS,
+            'SSL version to use.'
+        ) do |type|
+            options.http.ssl_version = type
         end
     end
 
@@ -448,6 +529,21 @@ class OptionParser < UI::CLI::OptionParser
     def browser_cluster
         separator ''
         separator 'Browser cluster'
+
+        on( '--browser-cluster-local-storage FILE',
+            "Sets the browsers' local storage using the JSON data in FILE."
+        ) do |file|
+            options.browser_cluster.local_storage = ::JSON.load( IO.read( file ) )
+        end
+
+        on( '--browser-cluster-wait-for-element PATTERN:CSS',
+            'Wait for element matching CSS to appear when visiting a page whose' <<
+            ' URL matches the PATTERN.'
+        ) do |rule|
+            pattern, css = rule.split( ':', 2 )
+            options.browser_cluster.wait_for_elements[ Regexp.new( pattern ) ] =
+                css
+        end
 
         on( '--browser-cluster-pool-size SIZE', Integer,
             'Amount of browser workers to keep in the pool and put to work.',

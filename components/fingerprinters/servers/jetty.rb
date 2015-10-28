@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -19,7 +19,7 @@ module Platform::Fingerprinters
 class Jetty < Platform::Fingerprinter
 
     def run
-        platforms << :jsp << :jetty if server_or_powered_by_include? 'jetty'
+        platforms << :java << :jetty if server_or_powered_by_include? 'jetty'
     end
 
 end

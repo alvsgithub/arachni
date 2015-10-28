@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -65,6 +65,14 @@ module State
     def initialize
         super
 
+        Element::Capabilities::Auditable.skip_like do |element|
+            if pause?
+                print_debug "Blocking on element audit: #{element.audit_id}"
+            end
+
+            wait_if_paused
+        end
+
         state.status = :ready
     end
 
@@ -96,9 +104,9 @@ module State
         return if @cleaned_up
         @cleaned_up = true
 
-        state.status = :cleanup
+        state.force_resume
 
-        sitemap.merge!( browser_sitemap )
+        state.status = :cleanup
 
         if shutdown_browsers
             state.set_status_message :browser_cluster_shutdown
@@ -125,6 +133,11 @@ module State
         @session = nil
 
         true
+    end
+
+    # @private
+    def reset_trainer
+        @trainer = Trainer.new( self )
     end
 
     # @note Prefer this from {.reset} if you already have an instance.
@@ -318,11 +331,6 @@ module State
         state.suspended?
     end
 
-    # @private
-    def reset_trainer
-        @trainer = Trainer.new( self )
-    end
-
     private
 
     # @note Must be called before calling any audit methods.
@@ -369,7 +377,7 @@ module State
                 new_element = true
             end
 
-            if e.respond_to?( :dom ) && e.dom
+            if page.dom.depth > 0 && e.respond_to?( :dom ) && e.dom
                 if !state.element_checked?( e.dom )
                     state.element_checked e.dom
                     new_element = true
@@ -413,7 +421,7 @@ module State
     end
 
     def suspend_to_disk
-        while wait_for_browser?
+        while wait_for_browser_cluster?
             last_pending_jobs ||= 0
             pending_jobs = browser_cluster.pending_job_counter
 
@@ -432,8 +440,8 @@ module State
         options.plugins = plugins.loaded.
             inject({}) { |h, name| h[name.to_s] = Options.plugins[name.to_s] || {}; h }
 
-        if browser_job_skip_states
-            state.browser_skip_states.merge browser_job_skip_states
+        if browser_cluster_job_skip_states
+            state.browser_skip_states.merge browser_cluster_job_skip_states
         end
 
         state.set_status_message :suspending_plugins

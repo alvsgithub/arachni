@@ -1,10 +1,12 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
     web site for more information on licensing and terms of use.
 =end
+
+require_relative '../dom'
 
 module Arachni::Element
 class Link
@@ -12,8 +14,20 @@ class Link
 # Provides access to DOM operations for {Link links}.
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-class DOM < Base
-    include Capabilities::Auditable::DOM
+class DOM < DOM
+
+    # Load and include all link-specific capability overrides.
+    lib = "#{File.dirname( __FILE__ )}/#{File.basename(__FILE__, '.rb')}/capabilities/**/*.rb"
+    Dir.glob( lib ).each { |f| require f }
+
+    # Generic element capabilities.
+    include Arachni::Element::Capabilities::WithNode
+    include Arachni::Element::DOM::Capabilities::Mutable
+    include Arachni::Element::DOM::Capabilities::Inputtable
+    include Arachni::Element::DOM::Capabilities::Auditable
+
+    # Link-specific overrides.
+    include Capabilities::Submittable
 
     # @return   [String, nil]
     #   URL fragment.
@@ -45,14 +59,18 @@ class DOM < Base
 
     # Loads the page with the {#inputs} in the {#fragment}.
     def trigger
-        browser.goto to_s, take_snapshot: false, update_transitions: false
+        [ browser.goto( to_s, take_snapshot: false, update_transitions: false ) ]
+    end
+
+    def valid_input_name?( name )
+        @valid_input_names.include? name
     end
 
     # @return   [String]
     #   URL including the DOM {#inputs}.
     def to_s
         "#{@action}##{fragment_path}?" << inputs.
-            map { |k, v| "#{encode_query_params(k)}=#{encode_query_params(v)}" }.
+            map { |k, v| "#{encode(k)}=#{encode(v)}" }.
             join( '&' )
     end
 
@@ -60,22 +78,9 @@ class DOM < Base
         "#{@action}##{fragment}"
     end
 
-    def encode_query_params( *args )
-        Link.encode_query_params( *args )
-    end
-
-    def encode( *args )
-        Link.encode( *args )
-    end
-
-    def decode( *args )
-        Link.decode( *args )
-    end
-
     def type
         self.class.type
     end
-
     def self.type
         :link_dom
     end
@@ -108,6 +113,8 @@ class DOM < Base
 
     def prepare_data_from_node
         return if !(data = self.class.data_from_node( node ))
+
+        @valid_input_names = data[:inputs].keys
 
         self.inputs     = data[:inputs]
         @default_inputs = self.inputs.dup.freeze

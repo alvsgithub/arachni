@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -7,10 +7,10 @@
 =end
 
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-# @version 0.2
+# @version 0.2.1
 class Arachni::Checks::Captcha < Arachni::Check::Base
 
-    CAPTCHA_RX = /captcha/i
+    CAPTCHA_RX = /.*captcha.*/i
 
     def run
         return if !page.body =~ CAPTCHA_RX
@@ -18,14 +18,23 @@ class Arachni::Checks::Captcha < Arachni::Check::Base
         # since we only care about forms parse the HTML and match forms only
         page.document.css( 'form' ).each do |form|
             # pretty dumb way to do this but it's a pretty dumb issue anyways...
-            next if !((form_html = form.to_s) =~ CAPTCHA_RX)
+            next if !(proof = find_proof( form ))
 
             log(
                 signature: CAPTCHA_RX,
-                proof:     form_html,
+                proof:     proof,
                 vector:    Element::Form.from_document( page.url, form ).first
             )
         end
+    end
+
+    def find_proof( node )
+        node.css('input').each do |input|
+            html = input.to_html
+            return html if html =~ CAPTCHA_RX
+        end
+
+        nil
     end
 
     def self.info
@@ -34,7 +43,7 @@ class Arachni::Checks::Captcha < Arachni::Check::Base
             description: %q{Greps pages for forms with CAPTCHAs.},
             elements:    [ Element::Form ],
             author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
-            version:     '0.2',
+            version:     '0.2.1',
 
             issue:       {
                 name:        %q{CAPTCHA protected form},
@@ -48,7 +57,7 @@ include user registration, or submitting emails via "Contact Us" pages etc.
 
 Arachni has flagged this not as a vulnerability, but as a prompt for the
 penetration tester to conduct further manual testing on the CAPTCHA function, as
-Arachni cannon audit CAPTCHA protected forms.
+Arachni cannot audit CAPTCHA protected forms.
 
 Testing for insecurely implemented CAPTCHA is a manual process, and an insecurely
 implemented CAPTCHA could allow a cyber-criminal a means to abuse these sensitive

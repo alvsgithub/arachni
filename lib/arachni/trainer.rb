@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -120,11 +120,16 @@ class Trainer
         # no new cookies have appeared there's no reason to analyze the page
         if incoming_page.body == @page.body && !has_new_elements &&
             @page.url == incoming_page.url
+            incoming_page.clear_cache
             print_debug 'Page hasn\'t changed.'
             return
         end
 
         [ :forms, :links ].each { |type| has_new_elements ||= has_new?( incoming_page, type ) }
+
+        incoming_page.paths.each do |path|
+            @framework.push_to_url_queue( path )
+        end
 
         if has_new_elements
             @trainings_per_url[incoming_page.url] += 1
@@ -133,12 +138,17 @@ class Trainer
             @framework.push_to_page_queue( incoming_page )
         end
 
+        incoming_page.clear_cache
+
         print_debug 'Training complete.'
     end
 
     def has_new?( incoming_page, element_type )
-        count = ElementFilter.send( "update_#{element_type}".to_sym, incoming_page.send( element_type ) )
-        incoming_page.clear_cache
+        count = ElementFilter.send(
+            "update_#{element_type}".to_sym,
+            incoming_page.send( element_type )
+        )
+
         return if count == 0
 
         print_info "Found #{count} new #{element_type}."

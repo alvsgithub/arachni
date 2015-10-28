@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -101,9 +101,6 @@ class Request < Message
     #   Maximum HTTP response size to accept, in bytes.
     attr_accessor :response_max_size
 
-    # @private
-    attr_accessor :root_redirect_id
-
     # @param  [Hash]  options
     #   Request options.
     # @option options [String] :url
@@ -129,6 +126,7 @@ class Request < Message
         super( options )
 
         @train           = false if @train.nil?
+        @fingerprint     = true  if @fingerprint.nil?
         @update_cookies  = false if @update_cookies.nil?
         @follow_location = false if @follow_location.nil?
         @max_redirects   = (Options.http.request_redirect_limit || REDIRECT_LIMIT)
@@ -222,14 +220,37 @@ class Request < Message
     end
 
     def body_parameters
-        return {} if method != :post
-        parameters.any? ? parameters : self.class.parse_body( body )
+        return {}         if method != :post
+        return parameters if parameters.any?
+
+        if headers.content_type.to_s.start_with?( 'multipart/form-data' )
+            return {} if !headers.content_type.include?( 'boundary=' )
+
+            return Form.parse_data(
+                body,
+                headers.content_type.match( /boundary=(.*)/i )[1].to_s
+            )
+        end
+
+        self.class.parse_body( body )
     end
 
     # @return   [String]
     #   HTTP request string.
     def to_s
         "#{headers_string}#{effective_body}"
+    end
+
+    def inspect
+        s = "#<#{self.class} "
+        s << "@id=#{id} "
+        s << "@mode=#{mode} "
+        s << "@method=#{method} "
+        s << "@url=#{url.inspect} "
+        s << "@parameters=#{parameters.inspect} "
+        s << "@high_priority=#{high_priority} "
+        s << "@performer=#{performer.inspect}"
+        s << '>'
     end
 
     # @note Can be invoked multiple times.
@@ -251,6 +272,13 @@ class Request < Message
     #   `true` if redirects should be followed, `false` otherwise.
     def follow_location?
         !!@follow_location
+    end
+
+    # @return   [Bool]
+    #   `true` if the {Response} should be {Platform::Manager.fingerprint fingerprinted}
+    #   for platforms, `false` otherwise.
+    def fingerprint?
+        @fingerprint
     end
 
     # @return   [Bool]
@@ -306,7 +334,8 @@ class Request < Message
 
         max_size = @response_max_size || Options.http.response_max_size
         # Weird I know, for some reason 0 gets ignored.
-        max_size = 1 if max_size == 0
+        max_size = 1   if max_size == 0
+        max_size = nil if max_size < 0
 
         options = {
             method:          method,
@@ -316,10 +345,24 @@ class Request < Message
             userpwd:         userpwd,
             followlocation:  follow_location?,
             maxredirs:       @max_redirects,
-            ssl_verifypeer:  false,
-            ssl_verifyhost:  0,
+
+            ssl_verifypeer:  !!Options.http.ssl_verify_peer,
+            ssl_verifyhost:  Options.http.ssl_verify_host ? 2 : 0,
+            sslcert:         Options.http.ssl_certificate_filepath,
+            sslcerttype:     Options.http.ssl_certificate_type,
+            sslkey:          Options.http.ssl_key_filepath,
+            sslkeytype:      Options.http.ssl_key_type,
+            sslkeypasswd:    Options.http.ssl_key_password,
+            cainfo:          Options.http.ssl_ca_filepath,
+            capath:          Options.http.ssl_ca_directory,
+            sslversion:      Options.http.ssl_version,
+
             accept_encoding: 'gzip, deflate',
             nosignal:        true,
+
+            # If Content-Length is missing this option will have no effect, so
+            # we'll also stream the body to make sure that we can at least abort
+            # the reading of the response body if it exceeds this limit.
             maxfilesize:     max_size,
 
             # Don't keep the socket alive if this is a blocking request because
@@ -329,7 +372,15 @@ class Request < Message
         }
 
         options[:timeout_ms] = timeout if timeout
-        options[:httpauth]   = :auto   if userpwd
+
+        # This will allow GSS-Negotiate to work out of the box but shouldn't
+        # have any adverse effects.
+        if !options[:userpwd] && !parsed_url.user
+            options[:userpwd]  = ':'
+            options[:httpauth] = :gssnegotiate
+        else
+            options[:httpauth] = :auto
+        end
 
         if proxy
             options.merge!(
@@ -353,17 +404,25 @@ class Request < Message
             end
         end
 
-        curl = parsed_url.query ? url.gsub( "?#{parsed_url.query}", '' ) : url
-        r = Typhoeus::Request.new( curl, options )
+        curl             = parsed_url.query ? url.gsub( "?#{parsed_url.query}", '' ) : url
+        typhoeus_request = Typhoeus::Request.new( curl, options )
 
         if @on_complete.any?
-            r.on_complete do |typhoeus_response|
+            response_body_buffer = ''
+            set_body_reader( typhoeus_request, response_body_buffer )
+
+            typhoeus_request.on_complete do |typhoeus_response|
+                if typhoeus_request.options[:maxfilesize]
+                    typhoeus_response.options[:response_body] =
+                        response_body_buffer
+                end
+
                 fill_in_data_from_typhoeus_response typhoeus_response
                 handle_response Response.from_typhoeus( typhoeus_response )
             end
         end
 
-        r
+        typhoeus_request
     end
 
     def to_h
@@ -388,7 +447,7 @@ class Request < Message
 
     def marshal_dump
         callbacks = @on_complete.dup
-        performer = @performer ? @performer.dup : nil
+        performer = @performer
 
         @performer   = nil
         @on_complete = []
@@ -400,7 +459,7 @@ class Request < Message
         end
     ensure
         @on_complete = callbacks
-        @performer   = performer.dup if performer
+        @performer   = performer
     end
 
     def marshal_load( h )
@@ -449,33 +508,69 @@ class Request < Message
                 h
             end
         end
+
+        def encode( string )
+            @easy ||= Ethon::Easy.new( url: 'www.example.com' )
+            @easy.escape string
+        end
     end
 
     def prepare_headers
-        headers['Cookie'] = effective_cookies.
-            map { |k, v| "#{Cookie.encode( k )}=#{Cookie.encode( v )}" }.
-            join( ';' )
-
         headers['User-Agent'] ||= Options.http.user_agent
         headers['Accept']     ||= 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         headers['From']       ||= Options.authorized_by if Options.authorized_by
 
-        headers.delete( 'Cookie' ) if headers['Cookie'].empty?
         headers.each { |k, v| headers[k] = Header.encode( v ) if v }
+
+        headers['Cookie'] = effective_cookies.
+            map { |k, v| "#{Cookie.encode( k, true )}=#{Cookie.encode( v )}" }.
+            join( ';' )
+        headers.delete( 'Cookie' ) if headers['Cookie'].empty?
+
+        headers
     end
 
     private
 
-    def fill_in_data_from_typhoeus_response( response )
-        @headers_string = response.debug_info.header_out.first
-        @effective_body = response.debug_info.data_out.first
+    def client_run
+        typhoeus_request = to_typhoeus
+
+        response_body_buffer = ''
+        set_body_reader( typhoeus_request, response_body_buffer )
+
+        typhoeus_response = typhoeus_request.run
+
+        if typhoeus_request.options[:maxfilesize]
+            typhoeus_response.options[:response_body] = response_body_buffer
+        end
+
+        fill_in_data_from_typhoeus_response typhoeus_response
+
+        Response.from_typhoeus( typhoeus_response )
     end
 
-    def client_run
-        response = to_typhoeus.run
-        fill_in_data_from_typhoeus_response response
+    def fill_in_data_from_typhoeus_response( response )
+        # Only grab the last data.
+        # In case of CONNECT calls for HTTPS via proxy the first data will be
+        # the proxy-related stuff.
+        @headers_string = response.debug_info.header_out.last
+        @effective_body = response.debug_info.data_out.last
+    end
 
-        Response.from_typhoeus( response )
+    def set_body_reader( typhoeus_request, buffer )
+        return if !typhoeus_request.options[:maxfilesize]
+
+        aborted = nil
+        typhoeus_request.on_body do |chunk|
+            next aborted if aborted
+
+            if buffer.size >= typhoeus_request.options[:maxfilesize]
+                buffer.clear
+                next aborted = :abort
+            end
+
+            buffer << chunk
+        end
     end
 
 end

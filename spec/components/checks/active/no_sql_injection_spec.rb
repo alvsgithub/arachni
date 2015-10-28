@@ -9,7 +9,7 @@ describe name_from_filename do
 
     def self.elements
         [ Element::Form, Element::Link, Element::Cookie, Element::Header,
-          Element::LinkTemplate ]
+          Element::LinkTemplate, Element::JSON, Element::XML ]
     end
 
     def issue_count_per_element_per_platform
@@ -17,9 +17,11 @@ describe name_from_filename do
             mongodb: {
                 Element::Form         => 2,
                 Element::Link         => 2,
-                Element::Cookie       => 1,
+                Element::Cookie       => 2,
                 Element::Header       => 1,
-                Element::LinkTemplate => 1
+                Element::LinkTemplate => 1,
+                Element::JSON         => 2,
+                Element::XML          => 2
             }
         }
     end

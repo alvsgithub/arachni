@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -9,25 +9,24 @@
 # Simple OS command injection check.
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-#
-# @version 0.2.2
+# @version 0.2.5
 #
 # @see http://cwe.mitre.org/data/definitions/78.html
-# @see http://www.owasp.org/index.php/OS_Command_Injection
+# @see https://www.owasp.org/index.php/OS_Command_Injection
 class Arachni::Checks::OsCmdInjection < Arachni::Check::Base
 
     def self.options
         @options ||= {
             regexp: {
                 unix: [
-                    /(root|mail):.+:\d+:\d+:.+:[0-9a-zA-Z\/]+/im
+                    /:.+:\d+:\d+:.+:[0-9a-zA-Z\/]+/im
                 ],
                 windows: [
                     /\[boot loader\].*\[operating systems\]/im,
                     /\[fonts\].*\[extensions\]/im
                 ]
             },
-            format: [ Format::STRAIGHT, Format::APPEND ]
+            format: [Format::STRAIGHT]
         }
     end
 
@@ -72,10 +71,9 @@ class Arachni::Checks::OsCmdInjection < Arachni::Check::Base
             description: %q{
 Tries to find Operating System command injections.
 },
-            elements:    [ Element::Form, Element::Link, Element::Cookie,
-                           Element::Header, Element::LinkTemplate ],
+            elements:    ELEMENTS_WITH_INPUTS,
             author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com> ',
-            version:     '0.2.2',
+            version:     '0.2.5',
             platforms:   payloads.keys,
 
             issue:       {
@@ -97,7 +95,7 @@ from that command contained within the server response. This indicates that prop
 input sanitisation is not occurring.
 },
                 references:  {
-                    'OWASP' => 'http://www.owasp.org/index.php/OS_Command_Injection',
+                    'OWASP' => 'https://www.owasp.org/index.php/OS_Command_Injection',
                     'WASC'  => 'http://projects.webappsec.org/w/page/13246950/OS%20Commanding'
                 },
                 tags:            %w(os command code injection regexp error),

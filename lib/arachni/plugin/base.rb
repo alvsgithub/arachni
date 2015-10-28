@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -36,8 +36,11 @@ class Base < Component::Base
 
     # @note **OPTIONAL**
     #
-    # Gets called right after the plugin is initialized and it used to prepare
-    # its data.
+    # Gets called right after the plugin is initialized and is used to prepare
+    # its data or setup hooks.
+    #
+    # This method should not block as the system will wait for it to return prior
+    # to progressing.
     #
     # @abstract
     def prepare
@@ -58,6 +61,10 @@ class Base < Component::Base
     # @note **REQUIRED**
     #
     # Gets called right after {#prepare} and delivers the plugin payload.
+    #
+    # This method will be ran in its own thread, in parallel to any other system
+    # operation. However, once its job is done, the system will wait for this
+    # method to return prior to exiting.
     #
     # @abstract
     def run
@@ -178,6 +185,14 @@ class Base < Component::Base
         framework.http
     end
 
+    def browser_cluster
+        framework.browser_cluster
+    end
+
+    def with_browser( &block )
+        browser_cluster.with_browser( &block )
+    end
+
     # Registers the plugin's results to {Data::Plugins}.
     #
     # @param    [Object]    results
@@ -187,7 +202,7 @@ class Base < Component::Base
 
     # Will block until the scan finishes.
     def wait_while_framework_running
-        sleep 1 while framework.running?
+        sleep 0.1 while framework.running?
     end
 
 end

@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -13,16 +13,14 @@ module Check
 #
 # There are 3 main types of audit and analysis techniques available:
 #
-# * {Arachni::Element::Capabilities::Analyzable::Taint Taint analysis}
+# * {Arachni::Element::Capabilities::Analyzable::Signature Signature analysis}
 #   -- {#audit}
 # * {Arachni::Element::Capabilities::Analyzable::Timeout Timeout analysis}
 #   -- {#audit_timeout}
 # * {Arachni::Element::Capabilities::Analyzable::Differential Differential analysis}
 #   -- {#audit_differential}
 #
-# It should be noted that actual analysis takes place at the element level,
-# and to be more specific, the {Arachni::Element::Capabilities::Auditable}
-# element level.
+# It should be noted that actual analysis takes place at the {Arachni::Element element} level.
 #
 # It also provides:
 #
@@ -76,17 +74,25 @@ module Auditor
             # check is configured to audit and user options.
             #
             # @param    [Page]    page
+            # @param    [Element::Base, Array<Element::Base>]    restrict_to_elements
+            #   Element types to check for.
             #
             # @return   [Bool]
-            def self.check?( page )
+            def self.check?( page, restrict_to_elements = nil, ignore_dom_depth = false )
                 return false if issue_limit_reached?
                 return true  if elements.empty?
 
-                audit = Arachni::Options.audit
+                audit                = Arachni::Options.audit
+                restrict_to_elements = [restrict_to_elements].flatten.compact
 
+                # We use procs to make the decisions to avoid loading the page
+                # element caches unless it's absolutely necessary.
+                #
+                # Also, it's better to audit Form & Cookie DOM elements only
+                # after the page has gone through the browser, because then
+                # we'll have some context in the metadata which can help us
+                # optimize DOM audits.
                 {
-                    # We use procs to make the decision, to avoid loading the page
-                    # element caches unless it's absolutely necessary.
                     Element::Link              =>
                         proc { audit.links?     && !!page.links.find { |e| e.inputs.any? } },
                     Element::Link::DOM         =>
@@ -94,22 +100,36 @@ module Auditor
                     Element::Form              =>
                         proc { audit.forms? && !!page.forms.find { |e| e.inputs.any? } },
                     Element::Form::DOM         =>
-                        proc { audit.form_doms? && page.has_script? && !!page.forms.find(&:dom) },
+                        proc { (ignore_dom_depth || page.dom.depth > 0) &&
+                            audit.form_doms? && page.has_script? && !!page.forms.find(&:dom) },
                     Element::Cookie            =>
                         proc { audit.cookies? && page.cookies.any? },
                     Element::Cookie::DOM       =>
-                        proc { audit.cookie_doms? && page.has_script? && page.cookies.any? },
+                        proc { (ignore_dom_depth || page.dom.depth > 0) &&
+                            audit.cookie_doms? && page.has_script? && page.cookies.any? },
                     Element::Header            =>
                         proc { audit.headers? && page.headers.any? },
                     Element::LinkTemplate      =>
                         proc { audit.link_templates? && page.link_templates.find { |e| e.inputs.any? } },
                     Element::LinkTemplate::DOM =>
                         proc { audit.link_template_doms? && !!page.link_templates.find(&:dom) },
+                    Element::JSON              =>
+                        proc { audit.jsons? && page.jsons.find { |e| e.inputs.any? } },
+                    Element::XML               =>
+                        proc { audit.xmls? && page.xmls.find { |e| e.inputs.any? } },
+                    Element::UIInput             => false,
+                    Element::UIInput::DOM        =>
+                        proc { audit.ui_inputs? && page.ui_inputs.any? },
+                    Element::UIForm            => false,
+                    Element::UIForm::DOM       =>
+                        proc { audit.ui_forms? && page.ui_forms.any? },
                     Element::Body              => !page.body.empty?,
                     Element::GenericDOM        => page.has_script?,
                     Element::Path              => true,
                     Element::Server            => true
                 }.each do |type, decider|
+                    next if restrict_to_elements.any? && !restrict_to_elements.include?( type )
+
                     return true if elements.include?( type ) &&
                         (decider.is_a?( Proc ) ? decider.call : decider)
                 end
@@ -164,6 +184,18 @@ module Auditor
     # injection strings.
     Format = Element::Capabilities::Mutable::Format
 
+    # Non-DOM auditable elements.
+    ELEMENTS_WITH_INPUTS = [
+        Element::Link, Element::Form, Element::Cookie, Element::Header,
+        Element::LinkTemplate, Element::JSON, Element::XML
+    ]
+
+    # Auditable DOM elements.
+    DOM_ELEMENTS_WITH_INPUTS = [
+        Element::Link::DOM, Element::Form::DOM, Element::Cookie::DOM,
+        Element::LinkTemplate::DOM, Element::UIInput::DOM, Element::UIForm::DOM
+    ]
+
     # Default audit options.
     OPTIONS = {
 
@@ -171,12 +203,9 @@ module Auditor
         #
         # If no elements have been passed to audit methods, candidates will be
         # determined by {#each_candidate_element}.
-        elements:     [Element::Link, Element::Form,
-                        Element::Cookie, Element::Header,
-                        Element::Body, Element::LinkTemplate],
+        elements:     ELEMENTS_WITH_INPUTS,
 
-        dom_elements: [Element::Link::DOM, Element::Form::DOM,
-                       Element::Cookie::DOM, Element::LinkTemplate::DOM],
+        dom_elements: DOM_ELEMENTS_WITH_INPUTS,
 
         # If set to `true` the HTTP response will be analyzed for new elements.
         # Be careful when enabling it, there'll be a performance penalty.
@@ -226,8 +255,8 @@ module Auditor
     #
     # @see Element::Server#remote_file_exist?
     def log_remote_file_if_exists( url, silent = false, &block )
-        Element::Server.new( page.url ).tap { |s| s.auditor = self }.
-            log_remote_file_if_exists( url, silent, &block )
+        @server ||= Element::Server.new( page.url ).tap { |s| s.auditor = self }
+        @server.log_remote_file_if_exists( url, silent, &block )
     end
     alias :log_remote_directory_if_exists :log_remote_file_if_exists
 
@@ -241,8 +270,8 @@ module Auditor
     #
     # @see Element::Body#match_and_log
     def match_and_log( patterns, &block )
-        Element::Body.new( self.page.url ).tap { |b| b.auditor = self }.
-            match_and_log( patterns, &block )
+        @body ||= Element::Body.new( self.page.url ).tap { |b| b.auditor = self }
+        @body.match_and_log( patterns, &block )
     end
 
     # Populates and logs an {Arachni::Issue}.
@@ -330,17 +359,22 @@ module Auditor
     #       If `false`, a message will be printed to stdout containing the status of
     #       the operation.
     #
+    # @return   [Issue]
+    #
     # @see #log_issue
     def log_remote_file( page_or_response, silent = false )
         page = page_or_response.is_a?( Page ) ?
             page_or_response : page_or_response.to_page
 
-        log_issue(
+        issue = log_issue(
             vector: Element::Server.new( page.url ),
+            proof:  page.response.status_line,
             page:   page
         )
 
         print_ok( "Found #{page.url}" ) if !silent
+
+        issue
     end
     alias :log_remote_directory :log_remote_file
 
@@ -418,8 +452,8 @@ module Auditor
     #   Element types to audit (see {OPTIONS}`[:elements]`).
     #
     # @yield       [element]
-    #   Each candidate element.
-    # @yieldparam [Arachni::Element]
+    #   Each candidate DOM element.
+    # @yieldparam [Arachni::Capabilities::Auditable::DOM]
     def each_candidate_element( types = [], &block )
         types = self.class.info[:elements] if types.empty?
         types = OPTIONS[:elements]         if types.empty?
@@ -427,7 +461,6 @@ module Auditor
         types.each do |elem|
             elem = elem.type
 
-            next if elem == Element::Body.type
             next if !Options.audit.elements?( elem )
 
             case elem
@@ -445,6 +478,12 @@ module Auditor
 
                 when Element::LinkTemplate.type
                     prepare_each_element( page.link_templates, &block )
+
+                when Element::JSON.type
+                    prepare_each_element( page.jsons, &block )
+
+                when Element::XML.type
+                    prepare_each_element( page.xmls, &block )
 
                 else
                     fail ArgumentError, "Unknown element: #{elem}"
@@ -488,6 +527,12 @@ module Auditor
                 when Element::LinkTemplate::DOM.type
                     prepare_each_dom_element( page.link_templates, &block )
 
+                when Element::UIInput::DOM.type
+                    prepare_each_dom_element( page.ui_inputs, &block )
+
+                when Element::UIForm::DOM.type
+                    prepare_each_dom_element( page.ui_forms, &block )
+
                 else
                     fail ArgumentError, "Unknown DOM element: #{elem}"
             end
@@ -495,17 +540,17 @@ module Auditor
     end
 
     # If a block has been provided it calls {Arachni::Element::Capabilities::Auditable#audit}
-    # for every element, otherwise, it defaults to {#audit_taint}.
+    # for every element, otherwise, it defaults to {#audit_signature}.
     #
     # Uses {#each_candidate_element} to decide which elements to audit.
     #
     # @see OPTIONS
     # @see Arachni::Element::Capabilities::Auditable#audit
-    # @see #audit_taint
+    # @see #audit_signature
     def audit( payloads, opts = {}, &block )
         opts = OPTIONS.merge( opts )
         if !block_given?
-            audit_taint( payloads, opts )
+            audit_signature( payloads, opts )
         else
             each_candidate_element( opts[:elements] ) do |e|
                 e.audit( payloads, opts, &block )
@@ -514,17 +559,17 @@ module Auditor
         end
     end
 
-    # Provides easy access to element auditing using simple taint analysis
+    # Provides easy access to element auditing using simple signature analysis
     # and automatically logs results.
     #
     # Uses {#each_candidate_element} to decide which elements to audit.
     #
     # @see OPTIONS
-    # @see Arachni::Element::Capabilities::Analyzable::Taint
-    def audit_taint( payloads, opts = {} )
+    # @see Arachni::Element::Capabilities::Analyzable::Signature
+    def audit_signature( payloads, opts = {} )
         opts = OPTIONS.merge( opts )
         each_candidate_element( opts[:elements] )do |e|
-            e.taint_analysis( payloads, opts )
+            e.signature_analysis( payloads, opts )
             audited( e.coverage_id )
         end
     end
@@ -613,8 +658,8 @@ module Auditor
         elements.each do |e|
             next if skip?( e ) || !e.dom || e.dom.inputs.empty?
 
-            d = e.dup
-            d.dom.auditor = self
+            d = e.dup.dom
+            d.auditor = self
             block.call d
         end
     end

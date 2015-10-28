@@ -1,5 +1,465 @@
 # ChangeLog
 
+## 1.3.2 _(October 19, 2015)_
+
+- `UI`
+    - `CLI`
+        - Help output
+            - Simplified `PATTERN` examples.
+            - Replaced `test.com` with `example.com`.
+- Browser
+    - Configure PhantomJS to accept any SSL version to allow for easier interception.
+- `HTTP`
+    - `Request`
+        - `#body_parameters` -- Added support for `multipart/form-data`.
+- `Element`
+    - `Form`
+        - `.parse_data` -- Parse `multipart/form-data`.
+    - `UIForm`
+        - `.from_browser` -- Include `<input type="submit">` buttons.
+
+
+## 1.3.1 _(October 13, 2015)_
+
+- `UI`
+    - `CLI`
+        - Options
+            - `--http-ssl-key` -- Fixed typo causing option to raise error.
+
+## 1.3 _(October 01, 2015)_
+
+- `UI`
+    - `CLI`
+        - Options
+            - `--browser-cluster-local-storage` -- Sets `localStorage` data from JSON file.
+- `Issue`
+    - `#variations` -- Removed, all issues now include full data.
+    - `#unique_id`, `#digest` -- In cases of passive issues, the associated
+        `#proof` is now taken into consideration.
+- `Data`
+    - `Framework`
+        - `#update_sitemap` -- Don't push URLs that include the
+            `Utilities.random_seed` to the sitemap to keep noise down.
+- `Element`
+    - `Cookie`
+        - `.encode` -- Updated list of reversed characters.
+        - `.decode` -- Handle broken encodings.
+    - `Form`
+        - `.decode` -- Handle broken encodings.
+    - `UIForm` -- Audits `<input>` and `<button>` groups which don't belong to
+        a `<form>` parent. Also covers cases of `<form>` submissions that occur
+        via elements other than a submit button.
+    - `UIInput` -- Audits individual `<input>` elements which have associated DOM events.
+    - `Capabilities` -- Refactored to allow for easier expansion of DOM capabilities.
+        - `Analyzable`
+            - `Differential` -- Updated to remove the injected seed from the response
+                bodies, echoed payloads can compromise the analysis.
+            - `Taint` => `Signature` -- Signature analysis better describes that
+                process and the "taint" terminology was overloaded by the browser's
+                taint tracing subsystems.
+- `Browser`
+    - Use the faster, native `#click` event on `Watir` elements, instead of `fire_event`.
+    - Sets `localStorage` data from `Arachni::OptionGroups::BrowserCluster#local_storage`.
+    - `Javascript`
+        - `TaintTracer`
+            - Updated sanitization of traced `Event` arguments to extract only
+                certain properties instead of iterating through the whole object.
+            - Limited the depth of the recursive taint search in argument objects.
+- `Components`
+    - Path extractors
+        - `comments`
+            - Small cleanup in acceptable paths.
+        - `script`
+            - Updated to not get fooled by comment strings (`/*Comment`, `//Comment`).
+            - Updated to require absolute paths to avoid processing junk.
+    - Reporters -- All reporters have been updated to remove `Issue#variations`.
+        - `xml` -- Updated schema to include the new `Element::UIForm::DOM` and
+            `Element::Input::DOM` elements.
+    - Plugins
+        - `proxy` -- Fixed bug causing the plugin to hang after proxy server shutdown.
+        - `login_script`
+            - Wait for the page to settle when using a JS login script.
+            - Catch script syntax errors.
+    - Checks
+        - Active
+            - Removed
+                `xss_dom_inputs` -- No longer necessary, covered by new DOM
+                    element abstractions and `xss_dom`.
+            - `unvalidated_redirect` -- Updated to use `Utilities.random_seed`
+                in the injected URL.
+            - `unvalidated_redirect_dom` -- Updated to use `Utilities.random_seed`
+                in the injected URL.
+        - Passive -- Reworked proofs to remove dynamic content which can interfere
+            with issue uniqueness or removed proofs altogether when not necessary.
+
+## 1.2.1 _(July 25, 2015)_
+
+- HTTP
+    - `ProxyServer`
+        - Updated SSL interception to use different interceptors for each host.
+        - Shutdown on framework abort, instead of waiting for the user to shutdown
+            the proxy manually.
+- Checks
+    - Passive
+        - `backdoors` -- Updated exempt platforms to all Framework platforms.
+- Fingerprinters
+    - Added
+        - Frameworks
+            - Nette
+            - Symphony
+
+## 1.2 _(July 16, 2015)_
+
+- Switched to Arachni Public Source License v1.0.
+- `UI`
+    - `CLI::Framework`
+        - Fixed timeout enforcement.
+        - `OptionParser`
+            - Added `--browser-cluster-wait-for-element`.
+    - `Output`
+        - `#error_log_fd` -- Catch `Errno` system errors (like `Too many open files`)
+            to avoid crashing.
+- `OptionGroups`
+    - `HTTP`
+        - `#request_queue_size` -- Lowered from `500` to `100`.
+    - `BrowserCluster`
+        - `#wait_for_elements` -- Wait for element matching `CSS` to appear when
+            visiting a page whose URL matches the `PATTERN`.
+        - `#job_timeout` -- Increased from 15 to 25 seconds.
+- `Framework`
+    - `#pause` -- Pause is now near instant.
+    - `#audit` -- Substantially simplified and optimized the consumption of URL
+        and page queues.
+    - `#audit_page` -- Application of DOM metadata now happens asynchronously
+        and uses the `BrowserCluster` instead of an independent `Browser`.
+- `HTTP`
+    - `Client`
+        - Updated cookie setting from `OptionGroups::HTTP#cookies` `Hash`.
+        - Trigger garbage collections before and after performing the queued
+            requests to prevent large RAM spikes.
+        - `Dynamic404Handler`
+            - Account for cases where the server returns intermittent errors
+                that can lead to signature corruption and possibly false positives.
+            - Updated training scenarios for cases where `~` are ignored.
+            - Disable platform fingerprinting during the gathering of signatures.
+    - `Request`
+        - Ignore proxy-related traffic (`CONNECT`) when capturing raw traffic data.
+        - Added `#fingerprint` option to enable/disable platform fingerprinting
+            on a per request basis.
+        - `#response_max_size` -- In addition to setting the `maxfilesize` for
+            the `Typhoeus::Request`, stream bodies and manually abort if the
+            buffer exceeds the limit -- covers cases where no `Content-Type`
+            is set.
+    - `Headers`
+        - Merge values of headers with identical normalized names (i.e.
+            `set-cookie` and `Set-Cookie` in the same response).
+        - Cache header name canonicalization.
+    - `ProxyServer`
+        - Cache header name canonicalization.
+        - SSL interceptor now automatically generates certificate/key pairs
+            based on Arachni CA.
+- `Page`
+    - `#has_script?` -- Detect using the body instead of the parsed document.
+- `Parser`
+    - Optimized to avoid HTML parsing if it contains no indication of elements.
+    - `#headers` -- Updated to include headers from the HTTP request in addition
+        to common ones.
+    - `Extractors` -- Optimized to avoid HTML parsing if it contains no
+        indication of elements.
+- `Element`
+    - Cleaned up per-element input value encoding.
+    - Enforce a `MAX_SIZE` on acceptable values during parsing.
+    - Optimized to avoid HTML parsing if it contains no indication of elements.
+    - `Server`
+        - `#log_remote_file_if_exists?` -- Flag issues as untrusted at that point
+        if possible, instead of at the end of the scan.
+        - `#remote_file_exist?` -- Disable platform fingerprinting when dealing
+            with a dynamic handler.
+    - `Capabilities`
+        - `Inputtable` -- Added cache for `#inputtable_id` calculation.
+        - `Analyzable`
+            - `Taint` -- Added match cache based on signatures and haystacks.
+            - `Timeout` -- Override user audit options that don't play nice with this technique.
+- `Check::Auditor`
+    - `#log_remote_file` -- Assign `HTTP::Response#status_line` as proof.
+- `Issue`
+    - `#signature` -- Store `Regexp` source instead of converting it to String.
+- `Browser`
+    - Updated to extract and whitelist CDNs from response bodies.
+    - `#cookies` -- Normalize cookies with quoted values since Watir doesn't take
+        care of that bit.
+    - `Javascript`
+        - `#inject` -- Inject `TaintTracer` and `DOMMonitor` update calls in
+            requested JS assets.
+        - `TaintTracer`
+            - Limited data and execution flow sinks to a max size of 50 entries.
+            - Don't trace functions known to cause issues:
+                - Anonymous functions.
+                - `lodash()`
+        - `DOMMonitor`
+            - Keep track of `jQuery` delegated events.
+- `Support`
+    - `Cache`
+        - `RandomReplacement` -- Removed extra key `Array`.
+    - `Signature` -- Cache token generation.
+- Checks -- Added `Issue#proof` to as many issues as possible.
+    - Active
+        - `xss`
+            - When the case involves payloads landing in `textarea`s, break out of
+                them to prevent possible FPs.
+            - Added double-encoded payloads.
+        - `xss_dom_inputs`
+            - Don't perform redundant audits.
+            - Don't process custom events.
+            - Updated to handle cases where a button needs to be clicked after
+                filling in the inputs.
+            - Added progress messages.
+        - `unvalidated_redirect`
+            - Escalated severity to 'High'.
+            - Only perform straight payload injections.
+        - `unvalidated_redirect_dom`
+            - Escalated severity to 'High'.
+        - `path_traversal`, `file_inclusion`, `os_cmd_injection`, `xxe`
+            - Updated `/etc/passwd` content matching pattern.
+    - Passive
+        - Added
+            - `common_admin_intefaces` -- By Brendan Coles.
+        - `backdoors`, `backup_directories`, `backup_files`, `common_files`,
+            `directory_listing`
+            - Added MVC frameworks as exempt platforms since they do their own routing.
+- Plugins
+    - Added
+        - `restrict_to_dom_state` -- Restricts the audit to a single page's DOM
+            state, based on a URL fragment.
+        - `metrics` -- Captures metrics about multiple aspects of the scan and
+            the web application.
+    - `autologin` -- Updated to fail gracefully in cases of an invisible form DOM elements.
+    - `login_script` -- Added support for Javascript login scripts.
+    - `proxy`
+        - Updated to show JSON and XML inputs in the inspection page.
+        - Added output message with instructions for server that use SSL.
+    - `vector_feed` -- Updated to support XML and JSON elements.
+- Reporters
+    - `xml`
+        - Fixed bug causing vector `affected_input_name` to be blank.
+- Fingerprinters -- Optimized across the board to prefer less resource intensive checks.
+    - Frameworks
+        - Rack -- Expanded signatures.
+    - Languages
+        - JSP renamed to Java and expanded signatures.
+        - PHP -- Expanded signatures.
+        - Python -- Expanded signatures.
+    - Servers
+        - Tomcat -- Expanded signatures.
+    - Added
+        - Frameworks
+            - Django
+            - Rails
+            - ASP.NET MVC
+            - CakePHP
+            - JSF
+            - CherryPy
+        - Servers
+            - Gunicorn
+- Path extractors
+    - Added
+        - `data_url` -- Extracts paths from `data-url` attributes of `a` tags.
+
+## 1.1 _(May 1, 2015)_
+
+- `gemspec` -- Require Ruby >= 2.0.0.
+- Options
+    - `--authorized-by` -- Fixed expected type (`Integer` => `String`).
+    - HTTP
+        - `request_timeout` -- Lowered from 50 to 10 seconds.
+        - `response_max_size` -- Set to 500KB.
+    - BrowserCluster
+        - `job_timeout` -- Lowered from 120 to 15 seconds.
+    - Scope
+        - `dom_depth_limit` -- Lowered from 10 to 5.
+    - Added:
+        - Audit
+            - `--audit-parameter-names` -- Injects payloads into parameter names.
+            - `--audit-with-extra-parameter` -- Injects payloads into an extra parameter.
+        - HTTP
+            - `--http-ssl-verify-peer` -- Verify SSL peer.
+            - `--http-ssl-verify-host` -- Verify SSL host.
+            - `--http-ssl-certificate` -- SSL certificate to use.
+            - `--http-ssl-certificate-type` -- SSL certificate type.
+            - `--http-ssl-key` -- SSL private key to use.
+            - `--http-ssl-key-type` -- SSL key type.
+            - `--http-ssl-key-password` -- Password for the SSL private key.
+            - `--http-ssl-ca` -- File holding one or more certificates with which to verify the peer.
+            - `--http-ssl-ca-directory` -- Directory holding multiple certificate files with which to verify the peer.
+            - `--http-ssl-version` -- SSL version to use.
+- `URI`
+    - Added `#resource_name`.
+    - Added `.full_and_absolute?`.
+    - `Scope`
+        - `#redundant?` -- No longer updates counter by default.
+        - `#auto_redundant?`
+            - No longer updates counter by default.
+            - Only consider URLs with query parameters.
+- `HTTP`
+    - `Client`
+        - Overhauled custom-404 identification and moved to `Dynamic404Handler`.
+- `Framework`
+    - `Parts`
+        - `Data`
+            - `#push_to_page_queue` -- Update redundancy scope counters.
+            - `#push_to_url_queue` -- Update redundancy scope counters.
+        - `Audit`
+            - `#audit_page`
+                - Apply DOM metadata to pages not originated from `Browser#to_page`.
+        - `Browser`
+            - Added utility `#browser`.
+            - Added `#use_browsers?`, determining whether system options and
+                capabilities allow for browsers to be used.
+            - `#wait_for_browsers?` => `#wait_for_browser_cluster?`
+- `Element`
+    - All
+        - Renamed `#html` to `#source`.
+        - Moved element-specific capabilities to their own files.
+    - `Cookie`
+            - `.encode` -- Encode `=` even when in value.
+    - `JSON` -- Represents JSON input vectors.
+    - `XML` -- Represents XML input vectors.
+    - `Form`
+        - Support forms with multiple values for `submit` inputs with sa
+        me names.
+    - `Server`
+        - `#log_remote_file_if_exists` -- Perform some rudimentary meta-analysis
+            on possible issues and only feed the identified resources back to the
+            system if they are above a certain threshold of similarity.
+            This fixes infinite loop scenarios when dealing with unreliable
+            custom-404 fingerprints.
+    - `Capabilities`
+        - `Mutable`
+            - `:param_flip` => `:parameter_names`
+            - Added `:parameter_values` option.
+            - Added `:with_extra_parameter` option.
+        - `Analyzable`
+            - `Timeout`
+                - Updated algorithm to be resilient to WAF/IDS/IPS filtering.
+                - Added remarks to each issue containing extra information
+                    regarding the state of the web application during analysis.
+            - `Differential` -- Added remarks to each issue containing extra information
+                regarding the used payloads.
+            - `Taint`
+                - Don't log issues when unable to get a verification response.
+                - Provide all matched data as proof, not only the regexp captured ones.
+        - `WithDOM`
+            - Added `#skip_dom` (set via `Browser#to_page`), to prevent `DOM`s
+                from being loaded and audited when there are no associated events.
+- `Page`
+    - Added `#update_metadata`, updating `#metadata` from `#cache` elements.
+    - Added `#reload_metadata`, updating `#cache` elements from `#metadata`.
+    - Added `#import_metadata`, importing `#metadata` from other page.
+    - `DOM`
+        - `#restore` -- Added debugging messages.
+- `Utilities`
+    - Added `.full_and_absolute_url?`.
+- `Browser`
+    - Updated to extract JSON and XML input vectors from HTTP requests.
+    - `#cookies` -- Normalize cookies with quoted values since Watir doesn't take
+        care of that bit.
+    - `#shutdown` -- Fixed Selenium exceptions on dead browser process.
+    - `#to_page` -- Apply DOM metadata to page elements.
+    - `#spawn_phantomjs` -- Enabled `--disk-cache` option for `phantomjs`.
+    - `#fire_event` -- Recode input values to fix encoding errors.
+    - `#to_page` -- Return empty page on unavailable response data instead of `nil`.
+    - `#snapshot_id` -- Updated to only consider important element attributes
+        (depending on type) instead of all of them.
+    - `ElementLocator`
+        - `#css` -- Returns a CSS locator.
+        - `#locate` -- Updated to use `#css`.
+    - `Javascript`
+        - Added `.select_event_attributes`.
+        - `DOMMonitor`
+            - `#digest` -- Removed `data-arachni-id` from digest.
+        - `TaintTracer`
+            - Added support for tracing multiple taints in groups.
+            - Added tracing for:
+                - `escape()`
+                - `unescape()`
+                - `String`
+                    - `indexOf()`
+                    - `lastIndexOf()`
+                - `jQuery`
+                    - `cookie()` plugin.
+- `BrowserCluster`
+    - `Worker`
+        - `#browser_respawn` -- Catch Watir/Selenium errors.
+- `Session`
+    - Ensure the browser is shut-down after each login operation.
+- `Check`
+    - `Auditor`
+        - `#each_candidate_dom_element` -- Yield element DOMs instead of parent elements.
+- `Plugin`
+    - `Manager`
+        - `#run` -- Optimized plugin initialization by using a queue to signal
+            a ready-state, instead of blocking for 1 second.
+-  Checks
+    - Active
+        - Added
+            - `unvalidated_redirect_dom` -- Logs DOM-based unvalidated redirects.
+            - `xxe` -- Logs XML External Entity vulnerabilities.
+        - `trainer` -- Disabled parameter flip for the payload to avoid parameter
+            pollution.
+        - `os_cmd_injection` -- Only use straight payload injection instead
+            of straight and append.
+        - `code_injection` -- Only use straight payload injection instead
+            of straight and append.
+        - `xss` -- When auditing links don't require a tainted response for
+            browser analysis.
+        - `xss_script_context`
+            - Updated payloads.
+            - Only use straight payload injection instead of straight and append.
+        - `xss_dom_script_context` -- Only use straight payload injection instead
+            of straight and append.
+        - `xss_tag` -- Updated payloads to handle cases when more data are appended
+            to the landed value.
+        - `xss_event` -- Added proof to the issue.
+    - Passive
+        - Added
+            - `insecure_cross_domain_policy_access` -- Checks `crossdomain.xml`
+                files for `allow-access-from` wildcard policies.
+            - `insecure_cross_domain_policy_headers` -- Checks `crossdomain.xml`
+                files for wildcard `allow-http-request-headers-from` policies.
+            - `insecure_client_access_policy` -- Checks `clientaccesspolicy.xml`
+                files for wildcard domain policies.
+            - `insecure_cors_policy` -- Logs wildcard `Access-Control-Allow-Origin`
+                headers per host.
+            - `x_frame_options` -- Logs missing `X-Frame-Options` headers per host.
+            - `common_directories` -- Added:
+                - `rails/info/routes`
+                - `rails/info/properties`
+        - `http_put` -- Try to `DELETE` the `PUT` file.
+        - `html_objects` -- Updated regexp to use non-capturing groups.
+- Plugins
+    - All
+        - Updated `#prepare` methods to not block, in accordance with the new
+            `Plugin::Manager#run` behavior.
+    - `email_notify`
+        - Added `domain` option.
+        - Fixed extension for `html` reporter.
+        - Added support for `afr` report type.
+    - `proxy` -- Added XML and JSON input vector extraction.
+    - Added:
+        - `vector_collector` -- Collects information about all seen input vectors
+            which are within the scan scope.
+        - `headers_collector` -- Collects response headers based on specified criteria.
+        - `exec` -- Calls external executables at different scan stages.
+- Report -- Renamed `#html` to `#source` for all elements.
+    - `html`
+        - Updated chart rendering to only take place when visiting the chart page.
+        - Fixed broken links.
+        - Cleaned up chart severity handling.
+        - Summary
+            - Added OWASP Top 10 tab.
+    - `xml`
+        - Schema update for issue remarks.
+
 ## 1.0.6 _(December 07, 2014)_
 
 - `arachni_rpcd` -- Fixed bug causing the `--nickname` option to not be understood.

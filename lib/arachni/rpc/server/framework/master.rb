@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -228,7 +228,7 @@ module Master
 
         # If for some reason we've got pages in the page queue this early,
         # consume them and get it over with.
-        audit_page_queue
+        master_audit_page_queue
 
         @first_run = true if @first_run.nil?
         next_page = nil
@@ -266,10 +266,10 @@ module Master
                 audit_page( page ) or http.run
             end
 
-            audit_page_queue
+            master_audit_page_queue
         end
 
-        audit_page_queue
+        master_audit_page_queue
 
         @audit_queues_done = true
         true

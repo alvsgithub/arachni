@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -36,15 +36,6 @@ class ResourceExploration < Job
         browser.trigger_events
     end
 
-    def resource=( resource )
-        # Get a copy of the page with the caches cleared, this way when the
-        # modules (or anything else) lazy-load elements and populate the caches
-        # there won't be any lingering references to them from the more time
-        # consuming browser analysis.
-        resource = resource.dup if resource.is_a? Page
-        @resource = resource
-    end
-
     def dup
         super.tap { |j| j.resource = resource }
     end
@@ -54,8 +45,10 @@ class ResourceExploration < Job
     end
 
     def to_s
-        "#<#{self.class}:#{object_id} @resource=#{@resource}>"
+        "#<#{self.class}:#{object_id} @resource=#{@resource} " <<
+            "time=#{@time} timed_out=#{timed_out?}>"
     end
+    alias :inspect :to_s
 
 end
 

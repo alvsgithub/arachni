@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -7,7 +7,7 @@
 =end
 
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-# @version 0.1.1
+# @version 0.1.2
 class Arachni::Checks::CookieSetForParentDomain < Arachni::Check::Base
 
     def run
@@ -16,7 +16,7 @@ class Arachni::Checks::CookieSetForParentDomain < Arachni::Check::Base
         page.parser.cookies.each do |cookie|
             next if !cookie.domain.start_with?( '.' ) || audited?( cookie.name )
 
-            log( vector: cookie )
+            log( vector: cookie, proof: cookie.domain )
             audited( cookie.name )
         end
     end
@@ -27,7 +27,7 @@ class Arachni::Checks::CookieSetForParentDomain < Arachni::Check::Base
             description: %q{Logs cookies that are accessible by all subdomains.},
             elements:    [ Element::Cookie ],
             author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
-            version:     '0.1.1',
+            version:     '0.1.2',
 
             issue:       {
                 name:        %q{Cookie set for parent domain},

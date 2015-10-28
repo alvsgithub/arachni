@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -7,7 +7,6 @@
 =end
 
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-# @version 0.1
 class Arachni::Checks::BackupDirectories < Arachni::Check::Base
 
     def self.formats
@@ -35,11 +34,12 @@ class Arachni::Checks::BackupDirectories < Arachni::Check::Base
 
     def self.info
         {
-            name:        'Backup directories',
-            description: %q{Tries to find backed-up directories.},
-            elements:    [ Element::Server ],
-            author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com> ',
-            version:     '0.1',
+            name:             'Backup directories',
+            description:      %q{Tries to find backed-up directories.},
+            elements:         [ Element::Server ],
+            author:           'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com> ',
+            version:          '0.1.1',
+            exempt_platforms: Arachni::Platform::Manager::FRAMEWORKS,
 
             issue:       {
                 name:            %q{Backup directory},

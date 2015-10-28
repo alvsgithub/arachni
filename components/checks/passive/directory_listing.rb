@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -76,11 +76,12 @@ class Arachni::Checks::DirectoryListing < Arachni::Check::Base
 
     def self.info
         {
-            name:        'Directory listing',
-            description: %q{Tries to force directory listings.},
-            elements:    [ Element::Server ],
-            author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
-            version:     '0.1.5',
+            name:             'Directory listing',
+            description:      %q{Tries to force directory listings.},
+            elements:         [ Element::Server ],
+            author:           'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
+            version:          '0.1.6',
+            exempt_platforms: Arachni::Platform::Manager::FRAMEWORKS,
 
             issue:       {
                 name:        %q{Directory listing},
@@ -98,7 +99,6 @@ application is structured.
 Arachni discovered that the affected page permits directory listing.
 },
                 references: {
-                    'CWE'  => 'http://cwe.mitre.org/data/definitions/548.html',
                     'WASC' => 'http://projects.webappsec.org/w/page/13246922/Directory%20Indexing'
                 },
                 tags:        %w(path directory listing index),

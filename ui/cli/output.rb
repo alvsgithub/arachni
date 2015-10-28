@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -85,6 +85,13 @@ module Output
         end
 
         @@error_fd
+
+    # Errno::EMFILE (too many open files) or something, nothing we can do
+    # about it except catch it to avoid a crash.
+    rescue SystemCallError => e
+        print_bad "[#{e.class}] #{e}"
+        e.backtrace.each { |line| print_bad line }
+        nil
     end
 
     # Prints and logs an error message.
@@ -111,6 +118,8 @@ module Output
     #
     # @param    [String]    str
     def log_error( str = '' )
+        return if !error_log_fd
+
         if !@@error_log_written_env
             @@error_log_written_env = true
 
@@ -194,7 +203,8 @@ module Output
     # @see #debug?
     def print_debug( str = '', level = 1 )
         return if !debug?( level )
-        print_color( '[!]', 36, str, $stderr )
+
+        print_color( "[#{'!' * level}]", 36, str, $stderr )
     end
 
     def print_debug_level_1( str = '' )

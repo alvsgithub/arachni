@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -34,7 +34,8 @@ class Arachni::Checks::InterestingResponses < Arachni::Check::Base
 
     def check_and_log( response )
         return if IGNORE_CODES.include?( response.code ) ||
-            response.body.to_s.empty? || issue_limit_reached?
+            response.body.to_s.empty? || issue_limit_reached? ||
+            response.scope.out?
 
         path = uri_parse( response.url ).path
 
@@ -57,7 +58,7 @@ class Arachni::Checks::InterestingResponses < Arachni::Check::Base
             description: %q{Logs all non 200 (OK) server responses.},
             elements:    [ Element::Server ],
             author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
-            version:     '0.2',
+            version:     '0.2.1',
 
             issue:       {
                 name:        %q{Interesting response},

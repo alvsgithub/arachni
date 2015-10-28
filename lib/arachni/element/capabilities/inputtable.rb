@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -37,6 +37,10 @@ module Capabilities::Inputtable
         end
     end
 
+    INPUTTABLE_CACHE = {
+        inputtable_id: Support::Cache::LeastRecentlyPushed.new( 1_000 )
+    }
+
     # Frozen version of {#inputs}, has all the original names and values.
     #
     # @return   [Hash]
@@ -51,7 +55,7 @@ module Capabilities::Inputtable
     # @note Will convert keys and values to strings.
     #
     # @param  [Hash]  hash
-    #   Inputs data.
+    #   Input data.
     #
     # @raise   [Error::InvalidData::Name]
     # @raise   [Error::InvalidData::Value]
@@ -100,7 +104,7 @@ module Capabilities::Inputtable
     # Resets the inputs to their original format/values.
     def reset
         super if defined?( super )
-        self.inputs = @default_inputs.dup
+        self.inputs = @default_inputs.deep_clone
         self
     end
 
@@ -136,6 +140,8 @@ module Capabilities::Inputtable
     # @raise   [Error::InvalidData::Name]
     # @raise   [Error::InvalidData::Value]
     def update( hash )
+        return self if hash.empty?
+
         self.inputs = @inputs.merge( hash )
         self
     end
@@ -221,7 +227,8 @@ module Capabilities::Inputtable
     # @return   [String]
     #   Uniquely identifies the {#inputs}.
     def inputtable_id
-        inputs.sort_by { |k,_| k }.to_s
+        INPUTTABLE_CACHE[:inputtable_id][@inputs] ||=
+            @inputs ? @inputs.sort_by { |k, _| k }.hash.to_s : ''
     end
 
     def to_h
@@ -253,7 +260,6 @@ module Capabilities::Inputtable
             fail Error::InvalidData::Value,
                  "Invalid value for #{self.class}: #{value.inspect}"
         end
-
     end
 
     def copy_inputtable( other )

@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -13,20 +13,18 @@
 # framework-wide cookies.
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-#
-# @version 0.2
+# @version 0.2.1
 class Arachni::Plugins::AutoLogin < Arachni::Plugin::Base
 
     STATUSES  = {
-        ok:             'Form submitted successfully.',
-        form_not_found: 'Could not find a form suiting the provided parameters.',
-        check_failed:   'Form submitted but the response did not match the verifier.'
+        ok:               'Form submitted successfully.',
+        form_not_found:   'Could not find a form suiting the provided parameters.',
+        form_not_visible: 'The form was located but its DOM element is not ' <<
+                              'visible and thus cannot be submitted.',
+        check_failed:     'Form submitted but the response did not match the verifier.'
     }
 
     def prepare
-        framework_pause
-        print_info 'System paused.'
-
         @parameters = request_parse_body( options[:parameters] )
         @verifier   = Regexp.new( options[:check] )
         @url        = options[:url].to_s
@@ -34,16 +32,27 @@ class Arachni::Plugins::AutoLogin < Arachni::Plugin::Base
     end
 
     def run
+        framework_pause
+        print_info 'System paused.'
+
         session.configure( url: @url, inputs: @parameters )
 
         response = begin
-            session.login
-        rescue Session::Error::FormNotFound
+            session.login( true )
+        rescue Arachni::Session::Error::FormNotFound
             register_results(
                 'status'  => 'form_not_found',
                 'message' => STATUSES[:form_not_found]
             )
             print_error STATUSES[:form_not_found]
+            @errored = true
+            return
+        rescue Arachni::Session::Error::FormNotVisible
+            register_results(
+                'status'  => 'form_not_visible',
+                'message' => STATUSES[:form_not_visible]
+            )
+            print_error STATUSES[:form_not_visible]
             @errored = true
             return
         end
@@ -93,6 +102,9 @@ class Arachni::Plugins::AutoLogin < Arachni::Plugin::Base
 It looks for the login form in the user provided URL, merges its input fields
 with the user supplied parameters and sets the cookies of the response and
 request as framework-wide cookies.
+
+**NOTICE**: If the login form is by default hidden and requires a sequence of DOM
+interactions in order to become visible, this plugin will not be able to submit it.
 },
             author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
             version:     '0.2',

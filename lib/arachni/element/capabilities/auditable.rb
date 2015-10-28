@@ -1,14 +1,11 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
     web site for more information on licensing and terms of use.
 =end
 
-require_relative 'inputtable'
-require_relative 'mutable'
-require_relative 'submittable'
 require_relative 'with_auditor'
 
 module Arachni
@@ -20,9 +17,6 @@ module Element::Capabilities
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
 module Auditable
     include Utilities
-    include Inputtable
-    include Submittable
-    include Mutable
     include WithAuditor
 
     # Load and include all available analysis/audit techniques.
@@ -326,7 +320,7 @@ module Auditable
 
         # Iterate over all fuzz variations and audit each one.
         each_mutation( payload, @audit_options ) do |elem|
-            if !Options.audit.vector?( elem.affected_input_name )
+            if !audit_input?( elem.affected_input_name )
                 print_info "Skipping audit of out of scope '#{elem.affected_input_name}' #{type} input vector."
                 next
             end
@@ -374,6 +368,13 @@ module Auditable
             elem.submit_and_process( submit_options, &block )
         end
 
+        true
+    end
+
+    def audit_input?( path )
+        [path].flatten.each do |name|
+            return false if !Options.audit.vector?( name )
+        end
         true
     end
 

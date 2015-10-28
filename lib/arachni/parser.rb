@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -31,14 +31,26 @@ class Parser
         # @abstract
         class Base
 
+            attr_reader :html
+            attr_reader :document
+            attr_reader :downcased_html
+
+            def initialize( options = {} )
+                @html           = options[:html]
+                @downcased_html = @html.downcase
+                @document       = options[:document]
+            end
+
             # This method must be implemented by all checks and must return an
             # array of paths as plain strings
             #
-            # @param    [Nokogiri]  document   Nokogiri document
-            #
             # @return   [Array<String>]  paths
             # @abstract
-            def run( document )
+            def run
+            end
+
+            def includes?( string_or_regexp )
+                !!@downcased_html[string_or_regexp]
             end
 
         end
@@ -125,9 +137,8 @@ class Parser
         @document = Nokogiri::HTML( body ) if text? rescue nil
     end
 
-    # @note It's more of a placeholder method, it doesn't actually analyze anything.
-    #   It's a long shot that any of these will be vulnerable but better be safe
-    #   than sorry.
+    # @note It will include common request headers as well headers from the HTTP
+    #   request.
     #
     # @return    [Hash]
     #   List of valid auditable HTTP header fields.
@@ -141,14 +152,15 @@ class Parser
             'User-Agent'      => @options.http.user_agent || '',
             'Referer'         => @url,
             'Pragma'          => 'no-cache'
-        }.map { |k, v| Header.new( url: @url, inputs: { k => v } ) }.freeze
+        }.merge( response.request.headers ).
+            map { |k, v| Header.new( url: @url, inputs: { k => v } ) }.freeze
     end
 
     # @return [Array<Element::Form>]
     #   Forms from {#document}.
     def forms
         return @forms.freeze if @forms
-        return [] if !text?
+        return [] if !text? || !(body =~ /<\s*form/i)
 
         f = Form.from_document( @url, document )
         return f if !@secondary_responses
@@ -199,7 +211,7 @@ class Parser
     #   Links in {#document}.
     def links
         return @links.freeze if @links
-        return @links = [link].compact if !text?
+        return @links = [link].compact if !text? || !(body =~ /\?.*=/)
 
         @links = [link].compact | Link.from_document( @url, document )
     end
@@ -214,12 +226,32 @@ class Parser
             [link_template].compact | LinkTemplate.from_document( @url, document )
     end
 
+    # @return [Array<Element::JSON>]
+    def jsons
+        @jsons ||= [JSON.from_request( @url, response.request )].compact
+    end
+
+    # @return [Array<Element::XML>]
+    def xmls
+        @xmls ||= [XML.from_request( @url, response.request )].compact
+    end
+
     # @return   [Hash]
     #   Parameters found in {#url}.
     def link_vars
-        return {} if (!parsed = uri_parse( @url ))
+        return {} if !(parsed = uri_parse( @url ))
 
         @link_vars ||= parsed.rewrite.query_parameters.freeze
+    end
+
+    # Dummy method, only the {Browser#to_page browser} can fill this in.
+    def ui_inputs
+        []
+    end
+
+    # Dummy method, only the {Browser#to_page browser} can fill this in.
+    def ui_forms
+        []
     end
 
     # @return   [Array<Element::Cookie>]
@@ -298,11 +330,25 @@ class Parser
     #   Paths.
     def run_extractors
         begin
-            self.class.extractors.available.map do |name|
-                exception_jail( false ){ self.class.extractors[name].new.run( document ) }
-            end.flatten.uniq.compact.
-                map { |path| to_absolute( path ) }.compact.uniq.
-                reject { |path| skip?( path ) }
+            unsanitized_paths = Set.new
+            self.class.extractors.available.each do |name|
+                exception_jail false do
+                    unsanitized_paths.merge self.class.extractors[name].new(
+                        document: document,
+                        html:     body
+                    ).run
+                end
+            end
+
+            sanitized_paths = Set.new
+            unsanitized_paths.map do |path|
+                abs = to_absolute( path )
+                next if !abs || skip?( abs )
+
+                sanitized_paths << abs
+            end
+
+            sanitized_paths.to_a
         rescue => e
             print_exception e
             []

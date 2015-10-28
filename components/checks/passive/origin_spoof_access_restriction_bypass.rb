@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -34,7 +34,11 @@ class Arachni::Checks::OriginSpoofAccessRestrictionBypass < Arachni::Check::Base
     def check_and_log( response )
         return if response.code != 200
 
-        log vector: Element::Server.new( response.url ), response: response
+        log(
+            vector:   Element::Server.new( response.url ),
+            response: response,
+            proof:    response.status_line
+        )
         print_ok "Request was accepted: #{response.url}"
     end
 

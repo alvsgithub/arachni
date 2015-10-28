@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -100,7 +100,8 @@ module MultiInstance
 
         data = {
             status: status,
-            busy:   running?
+            busy:   running?,
+            seed:   Utilities.random_seed
         }
 
         if include_issues
@@ -217,14 +218,6 @@ module MultiInstance
     def audit_queues
         if master?
             master_audit_queues
-        else
-            super
-        end
-    end
-
-    def audit_page_queue
-        if master?
-            master_audit_page_queue
         else
             super
         end

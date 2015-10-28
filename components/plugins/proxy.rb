@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -15,8 +15,6 @@ require 'ostruct'
 # data to {Arachni::Framework#push_to_page_queue} to be audited.
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-#
-# @version 0.3.1
 class Arachni::Plugins::Proxy < Arachni::Plugin::Base
 
     BASEDIR  = "#{File.dirname( __FILE__ )}/proxy/"
@@ -37,10 +35,6 @@ class Arachni::Plugins::Proxy < Arachni::Plugin::Base
     SESSION_TOKEN_COOKIE = 'arachni.proxy.session_token'
 
     def prepare
-        # don't let the framework run just yet
-        framework_pause
-        print_info 'System paused.'
-
         require_relative 'proxy/template_scope'
 
         @server = Arachni::HTTP::ProxyServer.new(
@@ -56,12 +50,21 @@ class Arachni::Plugins::Proxy < Arachni::Plugin::Base
     end
 
     def run
+        framework_pause
+        print_info 'System paused.'
+
         print_status "Listening on: http://#{@server[:BindAddress]}:#{@server[:Port]}"
 
         print_info "Control panel URL: #{url_for( :panel )}"
         print_info "Shutdown URL:      #{url_for( :shutdown )}"
         print_info 'The scan will resume once you visit the shutdown URL.'
-
+        print_info
+        print_info 'When browsing HTTPS sites, please accept the Arachni SSL certificate' +
+            ' or install the CA certificate manually from:'
+        print_info "    #{Arachni::HTTP::ProxyServer::INTERCEPTOR_CA_CERTIFICATE}"
+        print_info
+        print_bad '**DO NOT** forget to revoke it after using the proxy, as it' +
+            ' can be used by anyone to impersonate 3rd party servers.'
         print_info
         print_info '*' * 82
         print_info '* You need to clear your browser\'s cookies for this site before using the proxy! *'
@@ -69,16 +72,28 @@ class Arachni::Plugins::Proxy < Arachni::Plugin::Base
         print_info
 
         TemplateScope.get.set :params, {}
-        @server.start
+
+        Thread.new do
+            @server.start
+        end
+
+        wait_while_framework_running
     end
 
     def clean_up
+        @server.shutdown
+
         @pages.each { |p| framework.push_to_page_queue( p, true ) }
         framework_resume
     end
 
     def prepare_pages_for_inspection
-        @pages.select { |p| (p.forms.any? || p.links.any? || p.cookies.any?) && p.text? }
+        (@pages.select do |p|
+            next if !p.text?
+
+            p.forms.any? || p.links.any? || p.cookies.any? || p.jsons.any? ||
+                p.xmls.any?
+        end).to_a
     end
 
     def vectors_yaml
@@ -87,12 +102,18 @@ class Arachni::Plugins::Proxy < Arachni::Plugin::Base
             page.elements.each do |element|
                 next if element.inputs.empty?
 
-                vectors << {
+                data = {
                     type:   element.type,
                     method: element.method,
                     action: element.action,
                     inputs: element.inputs
                 }
+
+                if element.respond_to? :source
+                    data[:source] = element.source
+                end
+
+                vectors << data
             end
         end
         vectors.to_yaml
@@ -171,7 +192,7 @@ class Arachni::Plugins::Proxy < Arachni::Plugin::Base
         if shutdown?( url )
             print_status 'Shutting down...'
             set_response_body( res, erb( :shutdown_message ) )
-            @server.shutdown
+            clean_up
             return
         end
 
@@ -346,6 +367,8 @@ class Arachni::Plugins::Proxy < Arachni::Plugin::Base
         print_info " *  #{page.forms.size} forms"
         print_info " *  #{page.links.size} links"
         print_info " *  #{page.cookies.size} cookies"
+        print_info " *  #{page.jsons.size} JSON"
+        print_info " *  #{page.xmls.size} XML"
 
         @pages << page.dup
 
@@ -356,6 +379,17 @@ class Arachni::Plugins::Proxy < Arachni::Plugin::Base
     end
 
     def update_forms( page, request, response )
+
+        if (json = Arachni::Element::JSON.from_request( response.url, request ))
+            page.jsons |= [json]
+            return page
+        end
+
+        if (xml = Arachni::Element::XML.from_request( response.url, request ))
+            page.xmls |= [xml]
+            return page
+        end
+
         page.forms |= [Form.new(
             url:    response.url,
             action: response.url,
@@ -464,7 +498,7 @@ a way to restrict usage enough to avoid users unwittingly interfering with each
 others' sessions.
 },
             author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
-            version:     '0.3.1',
+            version:     '0.3.5',
             options:     [
                 Options::Port.new( :port,
                     description: 'Port to bind to.',

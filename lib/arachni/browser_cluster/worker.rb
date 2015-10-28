@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -45,7 +45,6 @@ class Worker < Arachni::Browser
     attr_reader   :time_to_live
 
     def initialize( options = {} )
-        javascript_token  = options.delete( :javascript_token )
         @master           = options.delete( :master )
 
         @max_time_to_live = options.delete( :max_time_to_live ) ||
@@ -58,8 +57,6 @@ class Worker < Arachni::Browser
         # Don't store pages if there's a master, we'll be sending them to him
         # as soon as they're logged.
         super options.merge( store_pages: false )
-
-        @javascript.token = javascript_token
 
         @done_signal = Queue.new
 
@@ -85,18 +82,29 @@ class Worker < Arachni::Browser
         # If we can't respawn, then bail out.
         return if browser_respawn_if_necessary.nil?
 
+        time = Time.now
         begin
             with_timeout @job_timeout do
                 exception_jail false do
                     begin
                         @job.configure_and_run( self )
-                    rescue Selenium::WebDriver::Error::WebDriverError
+                    rescue Selenium::WebDriver::Error::WebDriverError,
+                        Watir::Exception::Error => e
+
+                        print_debug "Error while processing job: #{@job}"
+                        print_debug
+                        print_debug_exception e
+
                         browser_respawn
                     end
                 end
             end
+
+            job.time = Time.now - time
         rescue TimeoutError => e
-            print_debug "Job timed-out after #{@job_timeout} seconds: #{@job}"
+            job.timed_out!( Time.now - time )
+
+            print_bad "Job timed-out after #{@job_timeout} seconds: #{@job}"
 
             # Could have left us with a broken browser.
             browser_respawn
@@ -121,12 +129,7 @@ class Worker < Arachni::Browser
     ensure
         @javascript.taint = nil
 
-        @preloads.clear
-        @cache.clear
-        @captured_pages.clear
-        @page_snapshots.clear
-        @page_snapshots_with_sinks.clear
-        @window_responses.clear
+        clear_buffers
 
         # The jobs may have configured callbacks to capture pages etc.,
         # remove them.
@@ -193,6 +196,15 @@ class Worker < Arachni::Browser
         super()
     end
 
+    def inspect
+        s = "#<#{self.class} "
+        s << "pid=#{@pid} "
+        s << "job=#{@job.inspect} "
+        s << "last-url=#{@last_url.inspect} "
+        s << "transitions=#{@transitions.size}"
+        s << '>'
+    end
+
     def self.name
         "BrowserCluster Worker##{object_id}"
     end
@@ -244,8 +256,6 @@ class Worker < Arachni::Browser
     def browser_respawn
         @time_to_live = @max_time_to_live
 
-        @window_responses.clear
-
         begin
             # If PhantomJS is already dead this will block for quite some time so
             # beware.
@@ -255,19 +265,17 @@ class Worker < Arachni::Browser
 
         kill_process
 
-        @watir    = nil
-        @selenium = nil
-
         # Browser may fail to respawn but there's nothing we can do about
         # that, just leave it dead and try again at the next job.
         begin
             @watir = ::Watir::Browser.new( selenium )
-
             ensure_open_window
-
             true
-        rescue Browser::Error::Spawn => e
-            print_error 'Could not respawn the browser, will try again at the next job.'
+        rescue Selenium::WebDriver::Error::WebDriverError,
+            Browser::Error::Spawn => e
+            print_error 'Could not respawn the browser, will try again at the ' <<
+                            "next job. (#{e})"
+            print_error 'Please try increasing the maximum open files limit of your OS.'
             nil
         end
     end

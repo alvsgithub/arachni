@@ -2,6 +2,7 @@ require 'spec_helper'
 
 class TrainerMockFramework
     attr_reader :pages
+    attr_reader :urls
     attr_reader :opts
     attr_reader :trainer
 
@@ -19,6 +20,7 @@ class TrainerMockFramework
         @opts.url = page.url if page
 
         @sitemap = []
+        @urls    = []
     end
 
     def accepts_more_pages?
@@ -45,6 +47,10 @@ class TrainerMockFramework
         @sitemap << page.url
         @pages << page
     end
+
+    def push_to_url_queue( url )
+        @urls << url
+    end
 end
 
 def request( url )
@@ -70,43 +76,43 @@ describe Arachni::Trainer do
     describe 'HTTP requests with "train" set to' do
         describe 'nil' do
             it 'skips the Trainer' do
-                @framework.pages.size.should == 0
+                expect(@framework.pages.size).to eq(0)
 
                 Arachni::HTTP::Client.request( @url + '/elems' )
                 @framework.run
 
-                @framework.pages.size.should == 0
+                expect(@framework.pages.size).to eq(0)
             end
         end
         describe false do
             it 'skips the Trainer' do
-                @framework.pages.size.should == 0
+                expect(@framework.pages.size).to eq(0)
 
                 Arachni::HTTP::Client.request( @url + '/elems', train: false )
                 @framework.run
 
-                @framework.pages.size.should == 0
+                expect(@framework.pages.size).to eq(0)
             end
         end
         describe true do
             it 'passes the response to the Trainer' do
-                @framework.pages.size.should == 0
+                expect(@framework.pages.size).to eq(0)
 
                 Arachni::HTTP::Client.request( @url + '/elems', train: true )
-                @framework.run
 
-                @framework.pages.size.should == 1
+                expect(@trainer).to receive(:push)
+                @framework.run
             end
 
             context 'when a redirection leads to new elements' do
                 it 'passes the response to the Trainer' do
-                    @framework.pages.size.should == 0
+                    expect(@framework.pages.size).to eq(0)
 
                     Arachni::HTTP::Client.request( @url + '/train/redirect', train: true )
                     @framework.run
 
                     page = @framework.pages.first
-                    page.links.first.inputs.include?( 'msg' ).should be_true
+                    expect(page.links.first.inputs.include?( 'msg' )).to be_truthy
                 end
             end
         end
@@ -115,12 +121,26 @@ describe Arachni::Trainer do
     context 'when a page' do
         context 'has not changed' do
             it 'is skipped' do
-                @framework.pages.size.should == 0
+                expect(@framework.pages).to be_empty
 
                 Arachni::HTTP::Client.request( @url, train: true )
                 @framework.run
 
-                @framework.pages.should be_empty
+                expect(@framework.pages).to be_empty
+            end
+
+            context 'but has new paths' do
+                it 'pushes them to the framework' do
+                    expect(@framework.urls).to be_empty
+
+                    Arachni::HTTP::Client.request( @url, train: true )
+
+                    Arachni::HTTP::Client.request( @url + '/new-paths', train: true )
+                    @framework.run
+
+                    expect(@framework.pages).to be_empty
+                    expect(@framework.urls).to be_any
+                end
             end
         end
 
@@ -142,7 +162,7 @@ describe Arachni::Trainer do
 
                 100.times { @trainer.push( get_response.call ) }
 
-                pages.size.should == Arachni::Trainer::MAX_TRAININGS_PER_URL
+                expect(pages.size).to eq(Arachni::Trainer::MAX_TRAININGS_PER_URL)
             end
         end
 
@@ -151,7 +171,7 @@ describe Arachni::Trainer do
                 res = Arachni::HTTP::Response.new(
                     url: @url + '/exclude_me'
                 )
-                @trainer.push( res ).should be_false
+                expect(@trainer.push( res )).to be_falsey
             end
         end
 
@@ -174,11 +194,10 @@ describe Arachni::Trainer do
                 pages = []
                 trainer.on_new_page { |p| pages << p }
 
-                Arachni::Options.scope.redundant_path_patterns = { /match_this/ => 10 }
+                Arachni::Options.scope.redundant_path_patterns = { /match_this/ => 0 }
+                trainer.push( get_response.call )
 
-                100.times { trainer.push( get_response.call ) }
-
-                pages.size.should == 10
+                expect(pages.size).to eq(0)
             end
         end
     end
@@ -188,9 +207,9 @@ describe Arachni::Trainer do
             it 'returns nil' do
                 @trainer.page = @page
 
-                @trainer.stub(:analyze) { raise }
+                allow(@trainer).to receive(:analyze) { raise }
 
-                @trainer.push( request( @url ) ).should be_nil
+                expect(@trainer.push( request( @url ) )).to be_nil
             end
         end
 
@@ -199,7 +218,7 @@ describe Arachni::Trainer do
                 @trainer.page = @page
 
                 Arachni::Options.scope.exclude_path_patterns = @url
-                @trainer.push( request( @url ) ).should be_false
+                expect(@trainer.push( request( @url ) )).to be_falsey
             end
         end
 
@@ -207,14 +226,14 @@ describe Arachni::Trainer do
             context 'text-based' do
                 it 'returns true' do
                     @trainer.page = @page
-                    @trainer.push( request( @url ) ).should be_true
+                    expect(@trainer.push( request( @url ) )).to be_truthy
                 end
             end
 
             context 'not text-based' do
                 it 'returns false' do
                     ct = @url + '/non_text_content_type'
-                    @trainer.push( request( ct ) ).should be_false
+                    expect(@trainer.push( request( ct ) )).to be_falsey
                 end
             end
         end
@@ -224,15 +243,15 @@ describe Arachni::Trainer do
                 it 'returns a page with the new form' do
                     url = @url + '/new_form'
                     @trainer.page = @page
-                    @trainer.push( request( url ) ).should be_true
+                    expect(@trainer.push( request( url ) )).to be_truthy
 
                     pages = @framework.pages
-                    pages.size.should == 1
+                    expect(pages.size).to eq(1)
 
                     page = pages.pop
                     new_forms = (page.forms - @page.forms)
-                    new_forms.size.should == 1
-                    new_forms.first.inputs.include?( 'input2' ).should be_true
+                    expect(new_forms.size).to eq(1)
+                    expect(new_forms.first.inputs.include?( 'input2' )).to be_truthy
                 end
             end
 
@@ -240,13 +259,13 @@ describe Arachni::Trainer do
                 it 'returns a page with the new link' do
                     url = @url + '/new_link'
                     @trainer.page = @page
-                    @trainer.push( request( url ) ).should be_true
+                    expect(@trainer.push( request( url ) )).to be_truthy
 
                     page = @framework.pages.first
 
                     new_links = (page.links - @page.links)
-                    new_links.size.should == 1
-                    new_links.select { |l| l.inputs.include?( 'link_param' ) }.should be_any
+                    expect(new_links.size).to eq(1)
+                    expect(new_links.select { |l| l.inputs.include?( 'link_param' ) }).to be_any
                 end
             end
 
@@ -254,11 +273,11 @@ describe Arachni::Trainer do
                 it 'returns a page with the new cookie appended' do
                     url = @url + '/new_cookie'
                     @trainer.page = @page
-                    @trainer.push( request( url ) ).should be_true
+                    expect(@trainer.push( request( url ) )).to be_truthy
 
                     page = @framework.pages.first
-                    page.cookies.size.should == 2
-                    page.cookies.select { |l| l.inputs.include?( 'new_cookie' ) }.should be_any
+                    expect(page.cookies.size).to eq(2)
+                    expect(page.cookies.select { |l| l.inputs.include?( 'new_cookie' ) }).to be_any
                 end
             end
         end
@@ -267,9 +286,9 @@ describe Arachni::Trainer do
             it 'extracts query vars from the effective url' do
                 url = @url + '/redirect?redirected=true'
                 @trainer.page = @page
-                @trainer.push( request( url ) ).should be_true
+                expect(@trainer.push( request( url ) )).to be_truthy
                 page = @framework.pages.first
-                page.links.last.inputs['redirected'].should == 'true'
+                expect(page.links.last.inputs['redirected']).to eq('true')
             end
         end
 
@@ -291,28 +310,28 @@ describe Arachni::Trainer do
             let(:subject) { TrainerMockFramework.new.trainer }
 
             context true do
-                before { TrainerMockFramework.any_instance.stub(:accepts_more_pages?){ true } }
+                before { allow_any_instance_of(TrainerMockFramework).to receive(:accepts_more_pages?){ true } }
 
                 it 'processes pages' do
                     pages = []
                     subject.on_new_page { |p| pages << p }
 
-                    subject.push( get_response.call ).should be_true
+                    expect(subject.push( get_response.call )).to be_truthy
 
-                    pages.size.should == 1
+                    expect(pages.size).to eq(1)
                 end
             end
 
             context false do
-                before { TrainerMockFramework.any_instance.stub(:accepts_more_pages?){ false } }
+                before { allow_any_instance_of(TrainerMockFramework).to receive(:accepts_more_pages?){ false } }
 
                 it 'does not process the page' do
                     pages = []
                     subject.on_new_page { |p| pages << p }
 
-                    subject.push( get_response.call ).should be_false
+                    expect(subject.push( get_response.call )).to be_falsey
 
-                    pages.should be_empty
+                    expect(pages).to be_empty
                 end
             end
         end

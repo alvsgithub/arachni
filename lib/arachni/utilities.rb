@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -158,6 +158,11 @@ module Utilities
         URI.normalize( url )
     end
 
+    # @see URI.full_and_absolute?
+    def full_and_absolute_url?( url )
+        Arachni::URI.full_and_absolute?( url.to_s )
+    end
+
     # @param   [String]   url
     #
     # @return  [String]   path
@@ -227,8 +232,8 @@ module Utilities
     #   `true` if the `url` is redundant, `false` otherwise.
     #
     # @see OptionGroups::Scope#redundant_path_patterns?
-    def redundant_path?( url )
-        uri_parse( url ).scope.redundant?
+    def redundant_path?( url, update_counters = false )
+        uri_parse( url ).scope.redundant?( update_counters )
     end
 
     #
@@ -384,6 +389,14 @@ module Utilities
         time.split( /[:\.]/ ).map { |t| t.to_i * a.pop }.inject(&:+)
     rescue
         0
+    end
+
+    def bytes_to_megabytes( bytes )
+        (bytes / 1024.0 / 1024.0).round( 3 )
+    end
+
+    def bytes_to_kilobytes( bytes )
+        (bytes / 1024.0 ).round( 3 )
     end
 
     # Wraps the `block` in exception handling code and runs it.

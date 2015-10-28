@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -33,6 +33,11 @@ RSpec.configure do |config|
     config.run_all_when_everything_filtered = true
     config.color = true
     config.add_formatter :documentation
+    config.include PageHelpers
+
+    config.mock_with :rspec do |mocks|
+        mocks.yield_receiver_to_any_instance_implementation_blocks = true
+    end
 
     config.before( :all ) do
         killall

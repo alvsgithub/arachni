@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -34,6 +34,11 @@ class Fingerprinter
     #
     # @abstract
     def run
+    end
+
+    def html?
+        @is_html ||= page.response.headers['content-type'].to_s.
+            downcase.include?( 'text/html' )
     end
 
     # @param    [String]    string

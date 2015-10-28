@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -19,6 +19,8 @@ module Utilities
     include Support::Mixins::Terminal
 
     def print_issues( issues, unmute = false, &interceptor )
+        issues = issues.sort_by { |i| [i.severity, i.name]}.reverse
+
         interceptor ||= proc { |s| s }
 
         print_line( interceptor.call, unmute )
@@ -26,12 +28,12 @@ module Utilities
 
         print_line( interceptor.call, unmute )
 
-        issue_cnt = issues.count
+        issue_cnt = issues.size
         issues.each.with_index do |issue, i|
             meth  = input = ''
 
             if issue.active?
-                input = " input `#{issue.vector.affected_input_name}`"
+                input = " input `#{issue.affected_input_name}`"
                 meth  = " using #{issue.vector.method.to_s.upcase}"
             elsif issue.vector.respond_to?( :inputs )
                 input = " with inputs `#{issue.vector.inputs.keys.join(', ')}`"
@@ -177,6 +179,9 @@ module Utilities
 
                     print_info "\t#{option[:name]} - #{option[:description]}"
                     print_info "\tType:        #{option[:type]}"
+                    if option[:choices]
+                        print_info "\tChoices:     #{option[:choices].join(', ')}"
+                    end
                     print_info "\tDefault:     #{option[:default]}"
                     print_info "\tRequired?:   #{option[:required]}"
 

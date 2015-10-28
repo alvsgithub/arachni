@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -61,6 +61,10 @@ class Instance
         @options   = Proxy.new( @client, 'options' )
         @checks    = Proxy.new( @client, 'checks' )
         @plugins   = Proxy.new( @client, 'plugins' )
+    end
+
+    def when_ready( &block )
+        self.class.when_ready( url, token, &block )
     end
 
     def token

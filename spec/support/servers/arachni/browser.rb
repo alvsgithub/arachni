@@ -2,7 +2,8 @@ require 'sinatra'
 require 'sinatra/contrib'
 require_relative '../../../../lib/arachni'
 
-@@hit_count ||= 0
+@@hit_count       ||= 0
+@@image_hit_count ||= 0
 
 get '/' do
     @@hit_count += 1
@@ -22,6 +23,111 @@ get '/' do
                 document.write( navigator.userAgent );
             </script>
         </div>
+    </body>
+</html>
+HTML
+end
+
+get '/If-None-Match' do
+    etag '1'
+
+    <<HTML
+<html>
+    <script src="/If-None-Match/asset"></script>
+
+    <body>
+    </body>
+</html>
+HTML
+end
+
+get '/If-None-Match/asset' do
+    etag '1'
+    ''
+end
+
+get '/If-Modified-Since' do
+    last_modified Time.now - 24*60*60
+    expires -1
+
+    <<HTML
+<html>
+    <script src="/If-Modified-Since/asset"></script>
+
+    <body>
+    </body>
+</html>
+HTML
+end
+
+get '/If-Modified-Since/asset' do
+    last_modified Time.now - 24*60*60
+    expires -1
+
+    ''
+end
+
+get '/wait_for_elements' do
+    <<HTML
+<html>
+    <body>
+    </body>
+
+    <script>
+        setInterval( function(){ document.write( '<button id="matchThis" />' ); }, 5000 );
+    </script>
+</html>
+HTML
+end
+
+get '/asset_domains' do
+end
+
+get '/asset_domains/link' do
+    <<HTML
+<html>
+    <body>
+        <link href="http://blah.link.stuff/link.css" />
+    </body>
+</html>
+HTML
+end
+
+get '/asset_domains/input' do
+    <<HTML
+<html>
+    <body>
+        <input type="image" src="http://blah.input.stuff/input.png" />
+    </body>
+</html>
+HTML
+end
+
+get '/asset_domains/script' do
+    <<HTML
+<html>
+    <body>
+        <script src="http://blah.script.stuff/script"></script>
+    </body>
+</html>
+HTML
+end
+
+get '/asset_domains/img' do
+    <<HTML
+<html>
+    <body>
+        <img src="http://blah.img.stuff/img.png" />
+    </body>
+</html>
+HTML
+end
+
+get '/asset_domains/extension/js' do
+    <<HTML
+<html>
+    <body>
+        <script src="http://code.jquery.com/jquery-2.1.4.min.js"></script>
     </body>
 </html>
 HTML
@@ -286,6 +392,10 @@ get '/fire_event/form/image-input' do
 HTML
 end
 
+get '/test.png' do
+    @@image_hit_count += 1
+end
+
 Arachni::Browser::Javascript::EVENTS_PER_ELEMENT[:input].each do |event|
     get "/fire_event/input/#{event}" do
         <<-EOHTML
@@ -367,7 +477,7 @@ get '/form-with-image-button' do
     <html>
       <form>
         <input type="text" name="stuff" value="blah">
-        <input type="image" name="myImageButton" src="/__sinatra__/404.png">
+        <input type="image" name="myImageButton" src="/test.png">
       </form>
     </html>
 HTML
@@ -596,6 +706,34 @@ get '/with-ajax' do
 HTML
 end
 
+get '/with-ajax-xml' do
+    <<HTML
+<html>
+    <head>
+        <script>
+            post_ajax = new XMLHttpRequest();
+            post_ajax.open( "POST", "/post-ajax", true );
+            post_ajax.send( '<input>stuff</input>' );
+        </script>
+    <head>
+</html>
+HTML
+end
+
+get '/with-ajax-json' do
+    <<HTML
+<html>
+    <head>
+        <script>
+            post_ajax = new XMLHttpRequest();
+            post_ajax.open( "POST", "/post-ajax", true );
+            post_ajax.send( '#{{ 'post-name' => 'post-value' }.to_json}' );
+        </script>
+    <head>
+</html>
+HTML
+end
+
 get '/get-ajax' do
     return if params['ajax-token'] != 'my-token'
 
@@ -616,19 +754,57 @@ get '/update-cookies' do
     cookies[:update] = 'this'
 end
 
-get '/with-image' do
-    @@image_hit = false
+get '/update-cookies' do
+    cookies[:update] = 'this'
+end
+
+get '/dom-cookies-names' do
+    cookies['my-cookie']  = 'stuff'
+    cookies['my-cookie2'] = 'stuff'
+    cookies['my-cookie3'] = 'stuff'
+
     <<HTML
-    <img src="/image.png" />
+    <html>
+        <script>
+            function getCookie( cname ) {
+                var name = cname + '=';
+                var ca = document.cookie.split(';');
+
+                for( var i = 0; i < ca.length; i++ ) {
+                    var c = ca[i].trim();
+
+                    if( c.indexOf( name ) == 0 ) {
+                        return c.substring( name.length, c.length )
+                    }
+                }
+
+                return '';
+            }
+
+            getCookie('my-cookie');
+            getCookie('my-cookie2');
+        </script>
+    </html>
 HTML
 end
 
-get '/image.png' do
-    @@image_hit = true
-end
+get '/dom-cookies-values' do
+    cookies['my-cookie']  = 'stuff1'
+    cookies['my-cookie2'] = 'stuff2'
+    cookies['my-cookie3'] = 'stuff3'
 
-get '/image-hit' do
-    @@image_hit.to_s
+    <<HTML
+    <html>
+        <script>
+            function cookiesHaveValue( value ) {
+                return document.cookie.indexOf( value ) != -1;
+            }
+
+            cookiesHaveValue('stuff1');
+            cookiesHaveValue('stuff2');
+        </script>
+    </html>
+HTML
 end
 
 get '/explore' do
@@ -862,6 +1038,149 @@ get '/hit-count' do
     @@hit_count.to_s
 end
 
+get '/image-hit-count' do
+    @@image_hit_count.to_s
+end
+
 get '/clear-hit-count' do
-    @@hit_count = 0
+    @@image_hit_count = @@hit_count = 0
+end
+
+get '/to_page/input/with_events' do
+    <<-EOHTML
+    <html>
+        <script>
+            function handleOnInput() {
+                document.getElementById("container").innerHTML =
+                    document.getElementById("my-input").value;
+            }
+        </script>
+
+        <body>
+            <input oninput="handleOnInput();" id="my-input" name="my-input" value="1" />
+
+            <div id="container">
+            </div>
+        </body>
+    </html>
+    EOHTML
+end
+
+get '/to_page/input/without_events' do
+    <<-EOHTML
+    <html>
+        <body>
+            <input id="my-input" name="my-input" value="1" />
+
+            <div id="container">
+            </div>
+        </body>
+    </html>
+    EOHTML
+end
+
+get '/to_page/textarea/with_events' do
+    <<-EOHTML
+    <html>
+        <script>
+            function handleOnInput() {
+                document.getElementById("container").innerHTML =
+                    document.getElementById("my-input").value;
+            }
+        </script>
+
+        <body>
+            <textarea oninput="handleOnInput();" id="my-input" name="my-input">
+            </textarea>
+
+            <div id="container">
+            </div>
+        </body>
+    </html>
+    EOHTML
+end
+
+
+get '/to_page/textarea/without_events' do
+    <<-EOHTML
+    <html>
+        <body>
+            <textarea id="my-input" name="my-input">
+            </textarea>
+
+            <div id="container">
+            </div>
+        </body>
+    </html>
+    EOHTML
+end
+
+get '/to_page/input/button/with_events' do
+    <<-EOHTML
+    <html>
+        <body>
+            <input id="my-input" type="text">
+            <input type="button" id="insert">Insert into DOM</button>
+
+            <div id="container">
+            </div>
+
+            <script>
+               document.getElementById('insert').addEventListener('click', function() {
+                    document.getElementById("container").innerHTML =
+                        document.getElementById("my-input").value;
+               });
+            </script>
+        </body>
+    </html>
+    EOHTML
+end
+
+get '/to_page/input/button/without_events' do
+    <<-EOHTML
+    <html>
+        <body>
+            <input id="my-input" type="text">
+            <input type="button" id="insert">Insert into DOM</button>
+
+            <div id="container">
+            </div>
+        </body>
+    </html>
+    EOHTML
+end
+
+get '/to_page/button/with_events' do
+    <<-EOHTML
+    <html>
+        <body>
+            <input id="my-input" type="text">
+            <button id="insert">Insert into DOM</button>
+
+            <div id="container">
+            </div>
+
+            <script>
+               document.getElementById('insert').addEventListener('click', function() {
+                    document.getElementById("container").innerHTML =
+                        document.getElementById("my-input").value;
+               });
+            </script>
+        </body>
+    </html>
+    EOHTML
+end
+
+get '/to_page/button/without_events' do
+    <<-EOHTML
+    <html>
+        <body>
+            <input id="my-input" type="text">
+            <button id="insert">Insert into DOM</button>
+
+            <div id="container">
+            </div>
+        </body>
+    </html>
+    EOHTML
 end

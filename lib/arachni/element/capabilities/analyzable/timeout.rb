@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -60,6 +60,15 @@ module Analyzable
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
 module Timeout
 
+    # Override user audit options that don't play nice with this technique.
+    TIMEOUT_OPTIONS =  {
+        skip_original:          true,
+        with_both_http_methods: false,
+        parameter_names:        false,
+        with_extra_parameter:   false,
+        extensively:            false
+    }
+
     class <<self
         def reset
 
@@ -77,7 +86,7 @@ module Timeout
             @candidates_phase_3    = []
             @phase_3_candidate_ids = Support::LookUp::HashSet.new( hasher: :timeout_id )
 
-            @logged = Support::LookUp::HashSet.new( hasher: :audit_id )
+            @logged = Support::LookUp::HashSet.new( hasher: :timeout_id )
 
             deduplicate
         end
@@ -177,8 +186,27 @@ module Timeout
 
                 @logged << elem
 
+                remarks = []
+
+                delays = elem.timing_attack_remark_data[:delays].
+                    map { |d| d / 1000.0 }
+                remarks << ('Delays (in seconds) used for each phase: ' <<
+                    delays.join(', '))
+
+                controls = elem.timing_attack_remark_data[:control_times]
+                remarks << ('Response times (in seconds) for control requests ' <<
+                    "prior to phases 2 & 3: #{controls.join(', ')}")
+
+                stabilizations = elem.timing_attack_remark_data[:stabilization_times]
+                remarks << ('Response times (in seconds) for stabilization ' <<
+                    "requests after each phase: #{stabilizations.join(', ')}")
+
                 elem.print_info '* Verification was successful.'
-                elem.auditor.log vector: elem, response: response
+                elem.auditor.log(
+                    vector:   elem,
+                    response: response,
+                    remarks:  { timing_attack: remarks }
+                )
             end
         end
 
@@ -195,6 +223,18 @@ module Timeout
             @logged.include? element
         end
 
+    end
+
+    attr_accessor :timing_attack_remark_data
+
+    def initialize(*)
+        super
+
+        @timing_attack_remark_data = {
+            control_times:       [],
+            stabilization_times: [],
+            delays:              []
+        }
     end
 
     # Performs timeout/time-delay analysis and logs an issue should there be one.
@@ -277,6 +317,8 @@ module Timeout
             print_bad "#{prepend}Max waiting time exceeded."
             false
         else
+            @timing_attack_remark_data[:stabilization_times] << response.time
+
             print_info "#{prepend}OK, got a response after #{response.time} seconds."
             true
         end
@@ -289,34 +331,24 @@ module Timeout
     def timing_attack_probe( payloads, options, &block )
         fail ArgumentError, 'Missing block' if !block_given?
 
-        options                     = options.dup
+        options                     = options.merge( TIMEOUT_OPTIONS )
         options[:delay]             = options.delete(:timeout)
         options[:timeout_divider] ||= 1
         options[:add]             ||= 0
 
-        options.merge!(
-            # Don't submit the form with its original values, we don't want
-            # any interference during timing attacks.
-            skip_original:     true,
+        # Intercept each element mutation prior to it being submitted and
+        # replace the '__TIME__' stub with the actual delay value.
+        options[:each_mutation] = proc do |mutation|
+            injected = mutation.affected_input_value
 
-            # Disable {Arachni::OptionGroups::Audit#cookies_extensively}, there's little
-            # to be gained in this case and just causes interference.
-            extensively:       false,
+            # Preserve the placeholder (__TIME__) payload because it's going to
+            # be needed for the verification phases...
+            mutation.audit_options[:timing_string] = injected
 
-            # Intercept each element mutation prior to it being submitted and
-            # replace the '__TIME__' stub with the actual delay value.
-            each_mutation:     proc do |mutation|
-                injected = mutation.affected_input_value
-
-                # Preserve the placeholder (__TIME__) payload because it's going to
-                # be needed for the verification phases...
-                mutation.audit_options[:timing_string] = injected
-
-                # ...but update it to use a real payload for this audit.
-                mutation.affected_input_value = injected.
-                    gsub( '__TIME__', payload_delay_from_options( options ) )
-            end
-        )
+            # ...but update it to use a real payload for this audit.
+            mutation.affected_input_value = injected.
+                gsub( '__TIME__', payload_delay_from_options( options ) )
+        end
 
         # Ignore response bodies to preserve bandwidth since we don't care
         # about them anyways.
@@ -331,6 +363,8 @@ module Timeout
 
         audit( payloads, options ) do |response, mutation|
             next if !response.timed_out?
+
+            mutation.timing_attack_remark_data[:delays] << options[:delay]
             block.call( mutation, response )
         end
     end
@@ -376,7 +410,7 @@ module Timeout
         # doesn't time out by default.
         #
         # If it does, then there's no way for us to test it reliably.
-        if_timeout_control_check_ok timeout do
+        if_timeout_control_check_ok seed, timeout do
 
             # Update our candidate mutation's affected input with the new payload.
             self.affected_input_value = payload
@@ -392,6 +426,7 @@ module Timeout
                     next
                 end
 
+                @timing_attack_remark_data[:delays] << timeout
                 block.call( response )
 
                 ensure_responsiveness
@@ -401,16 +436,38 @@ module Timeout
         http.run
     end
 
+    def dup
+        e = super
+        return e if !@timing_attack_remark_data
+
+        dupped_remark_data = {}
+        @timing_attack_remark_data.each do |k, v|
+            dupped_remark_data[k] = v.dup
+        end
+
+        e.timing_attack_remark_data = dupped_remark_data
+        e
+    end
+
+    def to_rpc_data
+        super.tap { |data| data.delete 'timing_attack_remark_data' }
+    end
+
     private
 
-    def if_timeout_control_check_ok( timeout, &block )
+    def if_timeout_control_check_ok( seed, timeout, &block )
         print_info '* Performing control check.'
 
-        timeout_control.submit( response_max_size: 0, timeout: timeout ) do |control|
+        # Use a real payload with a delay of 0, this way we can avoid getting
+        # tricked by WAFs/IDS/IPS dropping packets.
+        self.affected_input_value = seed.sub( '__TIME__', '0' )
+        submit( response_max_size: 0, timeout: timeout ) do |control|
             if control.timed_out?
                 print_info '* Control check failed, aborting.'
                 next
             end
+
+            @timing_attack_remark_data[:control_times] << control.time
 
             print_info '* Control check was successful, progressing' <<
                            ' to verification.'

@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -11,7 +11,7 @@ require 'nokogiri'
 # Creates an XML report of the audit.
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-# @version 0.3
+# @version 0.3.4
 class Arachni::Reporters::XML < Arachni::Reporter::Base
 
     LOCAL_SCHEMA  = File.dirname( __FILE__ ) + '/xml/schema.xsd'
@@ -44,6 +44,12 @@ class Arachni::Reporters::XML < Arachni::Reporter::Base
                             xml.remedy_code issue.remedy_code
                             xml.severity issue.severity
 
+                            xml.check {
+                                %w(name description author version shortname).each do |attr|
+                                    xml.send( attr, issue.check[attr.to_sym] )
+                                end
+                            }
+
                             if issue.cwe
                                 xml.cwe issue.cwe
                             end
@@ -63,8 +69,12 @@ class Arachni::Reporters::XML < Arachni::Reporter::Base
                                 xml.url vector.url
                                 xml.action vector.action
 
-                                if vector.respond_to? :html
-                                    xml.html vector.html
+                                if vector.respond_to? :source
+                                    xml.source vector.source
+                                end
+
+                                if vector.respond_to? :seed
+                                    xml.seed vector.seed
                                 end
 
                                 if issue.active?
@@ -78,54 +88,38 @@ class Arachni::Reporters::XML < Arachni::Reporter::Base
                                 if vector.respond_to? :inputs
                                     add_inputs( xml, vector.inputs )
                                 end
-                            }
 
-                            xml.variations {
-                                issue.variations.each do |variation|
-                                    xml.variation {
-                                        vector = variation.vector
-
-                                        xml.vector {
-                                            if issue.active?
-                                                xml.method_ vector.method
-                                            end
-
-                                            if vector.respond_to? :seed
-                                                xml.seed vector.seed
-                                            end
-
-                                            if vector.respond_to? :inputs
-                                                add_inputs( xml, vector.inputs )
-                                            end
-                                        }
-
-                                        xml.remarks {
-                                            variation.remarks.each do |commenter, remarks|
-                                                xml.commenter commenter
-                                                remarks.each do |remark|
-                                                    xml.remark remark
-                                                end
-                                            end
-                                        }
-
-                                        add_page( xml, variation.page )
-                                        add_page( xml, variation.referring_page, :referring_page )
-
-                                        xml.signature variation.signature
-                                        xml.proof variation.proof
-                                        xml.trusted variation.trusted
-                                        xml.platform_type variation.platform_type
-                                        xml.platform_name variation.platform_name
-                                    }
+                                if vector.respond_to? :default_inputs
+                                    add_inputs( xml, vector.default_inputs, :default_inputs  )
                                 end
                             }
+
+                            xml.remarks {
+                                issue.remarks.each do |commenter, remarks|
+                                    remarks.each do |remark|
+                                        xml.remark {
+                                            xml.commenter commenter
+                                            xml.text_ remark
+                                        }
+                                    end
+                                end
+                            }
+
+                            add_page( xml, issue.page )
+                            add_page( xml, issue.referring_page, :referring_page )
+
+                            xml.signature issue.signature
+                            xml.proof issue.proof
+                            xml.trusted issue.trusted
+                            xml.platform_type issue.platform_type
+                            xml.platform_name issue.platform_name
                         }
                     end
                 }
 
                 xml.plugins {
                     format_plugin_results( false ) do |name, formatter|
-                        xml.send( name ) {
+                        xml.send( "#{name}_" ) {
                             xml.name report.plugins[name][:name]
                             xml.description report.plugins[name][:description]
 
@@ -145,6 +139,7 @@ class Arachni::Reporters::XML < Arachni::Reporter::Base
             ap error
             has_errors = true
         end
+
         fail 'XML report could not be validated against the XSD.' if has_errors
 
         IO.binwrite( outfile, xml )
@@ -157,7 +152,7 @@ class Arachni::Reporters::XML < Arachni::Reporter::Base
             description:  %q{Exports the audit results as an XML (.xml) file.},
             content_type: 'text/xml',
             author:       'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
-            version:      '0.3',
+            version:      '0.3.4',
             options:      [ Options.outfile( '.xml' ), Options.skip_responses ]
         }
     end
@@ -226,7 +221,7 @@ class Arachni::Reporters::XML < Arachni::Reporter::Base
                         xml.transition {
                             xml.element transition.element
                             xml.event transition.event
-                            xml.time transition.time.round( 4 )
+                            xml.time transition.time.to_f.round( 4 )
                         }
                     end
                 }

@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -21,8 +21,11 @@ class BrowserProvider < Job
     end
 
     def to_s
-        "#<#{self.class}:#{object_id} callback=#{browser.master.callback_for( self ) if browser && browser.master}>"
+        "#<#{self.class}:#{object_id} " <<
+            "callback=#{browser.master.callback_for( self ) if browser && browser.master} " <<
+            "time=#{@time} timed_out=#{timed_out?}>"
     end
+    alias :inspect :to_s
 
 end
 

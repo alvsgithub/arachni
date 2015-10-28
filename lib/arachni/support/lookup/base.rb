@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -83,7 +83,13 @@ class Base
     end
 
     def dup
-        deep_clone
+        self.class.new( @options.dup ).tap { |c| c.collection = @collection.dup }
+    end
+
+    protected
+
+    def collection=( c )
+        @collection = c
     end
 
     private

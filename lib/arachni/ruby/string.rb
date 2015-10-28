@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -146,9 +146,8 @@ class String
     end
 
     def recode!
-        force_encoding( 'utf-8' )
-        encode!( 'utf-16be', invalid: :replace, undef: :replace )
-        encode!( 'utf-8' )
+        encode!( 'utf-8', invalid: :replace, undef: :replace )
+        self
     end
 
     def recode

@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -9,7 +9,6 @@
 # Logs cookies that are accessible via JavaScript.
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-# @version 0.1.2
 class Arachni::Checks::HttpOnlyCookies < Arachni::Check::Base
 
     def run
@@ -27,7 +26,7 @@ class Arachni::Checks::HttpOnlyCookies < Arachni::Check::Base
             description: %q{Logs cookies that are accessible via JavaScript.},
             elements:    [ Element::Cookie ],
             author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
-            version:     '0.1.2',
+            version:     '0.1.4',
 
             issue:       {
                 name:            %q{HttpOnly cookie},

@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -14,9 +14,23 @@ module Arachni::Element
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
 class Header < Base
-    include Capabilities::Analyzable
 
-    INVALID_INPUT_DATA = [ "\0" ]
+    # Load and include all form-specific capability overrides.
+    lib = "#{File.dirname( __FILE__ )}/#{File.basename(__FILE__, '.rb')}/capabilities/**/*.rb"
+    Dir.glob( lib ).each { |f| require f }
+
+    # Generic element capabilities.
+    include Arachni::Element::Capabilities::Auditable
+    include Arachni::Element::Capabilities::Submittable
+    include Arachni::Element::Capabilities::Inputtable
+    include Arachni::Element::Capabilities::Analyzable
+
+    # Header-specific overrides.
+    include Capabilities::Mutable
+    include Capabilities::Inputtable
+
+    ENCODE_CHARACTERS      = ["\n", "\r"]
+    ENCODE_CHARACTERS_LIST = ENCODE_CHARACTERS.join
 
     def initialize( options )
         super( options )
@@ -28,37 +42,6 @@ class Header < Base
 
     def simple
         @inputs.dup
-    end
-
-    # Overrides {Capabilities::Mutable#each_mutation} to handle header-specific
-    # limitations.
-    #
-    # @param (see Capabilities::Mutable#each_mutation)
-    # @return (see Capabilities::Mutable#each_mutation)
-    # @yield (see Capabilities::Mutable#each_mutation)
-    # @yieldparam (see Capabilities::Mutable#each_mutation)
-    #
-    # @see Capabilities::Mutable#each_mutation
-    def each_mutation( payload, opts = {}, &block )
-        flip = opts.delete( :param_flip )
-        super( payload, opts, &block )
-
-        return if !flip
-
-        if !valid_input_name_data?( payload )
-            print_debug_level_2 'Payload not supported as input name by' <<
-                                    " #{audit_id}: #{payload.inspect}"
-            return
-        end
-        
-        elem = self.dup
-        elem.affected_input_name = 'Parameter flip'
-        elem.inputs = { payload => seed }
-        yield elem
-    end
-
-    def valid_input_data?( data )
-        !INVALID_INPUT_DATA.find { |c| data.include? c }
     end
 
     # @return   [String]
@@ -74,8 +57,11 @@ class Header < Base
     end
 
     class <<self
-        def encode( header )
-            ::URI.encode( header.to_s, "\r\n" )
+        def encode( str )
+            str = str.to_s
+            return str if !ENCODE_CHARACTERS.find { |c| str.include? c }
+
+            ::URI.encode( str, ENCODE_CHARACTERS_LIST )
         end
 
         def decode( header )

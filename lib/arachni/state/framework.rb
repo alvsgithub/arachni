@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -99,7 +99,6 @@ class Framework
     #   All possible {#status_messages} by type.
     def available_status_messages
         {
-            pausing:                          'Will pause as soon as the current page is audited.',
             suspending:                       'Will suspend as soon as the current page is audited.',
             waiting_for_browser_cluster_jobs: 'Waiting for %i browser cluster jobs to finish.',
             suspending_plugins:               'Suspending plugins.',
@@ -345,7 +344,6 @@ class Framework
 
         if !paused?
             @status = :pausing
-            set_status_message :pausing
         end
 
         @pause_signals << caller
@@ -400,6 +398,12 @@ class Framework
         end
 
         false
+    end
+
+    def force_resume
+        @pause_signals.to_a.each do |ref|
+            resume ref
+        end
     end
 
     def dump( directory )

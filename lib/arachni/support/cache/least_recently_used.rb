@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -15,23 +15,20 @@ module Support::Cache
 # Discards the least recently used entries in order to make room for newer ones.
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-class LeastRecentlyUsed < Base
+class LeastRecentlyUsed < LeastRecentlyPushed
 
     # @see Arachni::Cache::Base#[]
     def []( k )
-        super( k )
-    ensure
+        return if !include? k
+
         renew( k )
+        super( k )
     end
 
     private
 
     def renew( k )
-        @cache[k] = @cache.delete( k )
-    end
-
-    def prune
-        @cache.delete( @cache.first.first )
+        @cache[make_key( k )] = @cache.delete( make_key( k ) )
     end
 
 end

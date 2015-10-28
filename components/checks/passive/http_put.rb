@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -20,20 +20,30 @@ class Arachni::Checks::HttpPut < Arachni::Check::Base
     end
 
     def run
-        path = get_path( page.url ) + 'Arachni-' + random_seed.to_s[0..4].to_s
+        path = "#{get_path( page.url )}Arachni-#{random_seed}"
         return if audited?( path )
         audited( path )
 
         http.request( path, method: :put, body: self.class.body ) do |res|
-            http.get( path ) { |c_res| check_and_log( c_res ) } if res.code == 201
+            next if res.code != 201
+
+            http.get( path ) do |c_res|
+                check_and_log( c_res, res )
+
+                # Try to DELETE the PUT file.
+                http.request( path, method: :delete ){}
+            end
         end
     end
 
-    def check_and_log( response )
+    def check_and_log( response, put_response )
         return if !response.body.to_s.include?( self.class.substring )
 
-        log vector: Element::Server.new( response.url ), response: response
-        print_ok "File has been created: #{response.url}"
+        log(
+            vector:   Element::Server.new( response.url ),
+            response: put_response,
+            proof:    put_response.status_line
+        )
     end
 
     def self.info
@@ -42,7 +52,7 @@ class Arachni::Checks::HttpPut < Arachni::Check::Base
             description: %q{Checks if uploading files is possible using the HTTP PUT method.},
             elements:    [ Element::Server ],
             author:      'Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>',
-            version:     '0.2',
+            version:     '0.2.3',
 
             issue:       {
                 name:            %q{Publicly writable directory},

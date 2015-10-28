@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -11,9 +11,12 @@ class Easy
 module Callbacks
     def debug_callback
         @debug_callback ||= proc do |handle, type, data, size, udata|
+            # We only care about these so that we can have access to raw
+            # HTTP request traffic for reporting/debugging purposes.
+            next if type != :header_out && type != :data_out
+
             message = data.read_string( size )
             @debug_info.add type, message
-            # print message unless [:data_in, :data_out].include?(type)
             0
         end
     end

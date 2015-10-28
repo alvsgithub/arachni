@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -21,6 +21,12 @@ class Javascript
     require_relative 'javascript/taint_tracer'
     require_relative 'javascript/dom_monitor'
 
+    CACHE = {
+        select_event_attributes: Support::Cache::LeastRecentlyPushed.new( 1_000 )
+    }
+
+    TOKEN = 'arachni_js_namespace'
+
     # @return   [String]
     #   URL to use when requesting our custom JS scripts.
     SCRIPT_BASE_URL = 'http://javascript.browser.arachni/'
@@ -32,6 +38,8 @@ class Javascript
     SCRIPT_SOURCES = Dir.glob("#{SCRIPT_LIBRARY}*.js").inject({}) do |h, path|
         h.merge!( path => IO.read(path) )
     end
+
+    HTML_IDENTIFIERS = ['<!doctype html', '<html', '<head', '<body', '<title', '<script']
 
     NO_EVENTS_FOR_ELEMENTS = Set.new([
         :base, :bdo, :br, :head, :html, :iframe, :meta, :param, :script, :style,
@@ -106,7 +114,7 @@ class Javascript
     attr_accessor :token
 
     # @return   [String]
-    #   Taint to look for and trace in the JS data flow.
+    #   Taints to look for and trace in the JS data flow.
     attr_accessor :taint
 
     # @return   [String]
@@ -124,6 +132,31 @@ class Javascript
 
     def self.events
         GLOBAL_EVENTS | EVENTS_PER_ELEMENT.values.flatten.uniq
+    end
+
+    def self.event_whitelist
+        @event_whitelist ||= Set.new( events.flatten.map(&:to_s) )
+    end
+
+    # @param    [Symbol]    element
+    #
+    # @return   [Array<Symbol>]
+    #   Events for `element`.
+    def self.events_for( element )
+        GLOBAL_EVENTS | EVENTS_PER_ELEMENT[element.to_sym]
+    end
+
+    # @param    [Hash]  attributes
+    #   Element attributes.
+    #
+    # @return   [Hash]
+    #   `attributes` that include {.events}.
+    def self.select_event_attributes( attributes = {} )
+        CACHE[:select_event_attributes][attributes] ||=
+            attributes.inject({}) do |h, (event, handler)|
+                next h if !event_whitelist.include?( event.to_s )
+                h.merge!( event.to_sym => handler )
+            end
     end
 
     # @param    [Browser]   browser
@@ -158,7 +191,7 @@ class Javascript
     # @return   [String]
     #   Token used to namespace the injected JS code and avoid clashes.
     def token
-        @token ||= generate_token.to_s
+        @token ||= TOKEN
     end
 
     # @return   [String]
@@ -228,7 +261,7 @@ class Javascript
     # @return   (see TaintTracer#data_flow_sinks)
     def data_flow_sinks
         return [] if !supported?
-        taint_tracer.data_flow_sinks
+        taint_tracer.data_flow_sinks[@taint] || []
     end
 
     # @return   (see TaintTracer#flush_execution_flow_sinks)
@@ -240,7 +273,7 @@ class Javascript
     # @return   (see TaintTracer#flush_data_flow_sinks)
     def flush_data_flow_sinks
         return [] if !supported?
-        taint_tracer.flush_data_flow_sinks
+        taint_tracer.flush_data_flow_sinks[@taint] || []
     end
 
     # Sets a custom ID attribute to elements with events but without a proper ID.
@@ -257,6 +290,8 @@ class Javascript
         dom_monitor.digest
     end
 
+    # @note Will not include custom events.
+    #
     # @return   [Array<Hash>]
     #   Information about all DOM elements, including any registered event listeners.
     def dom_elements_with_events
@@ -266,10 +301,15 @@ class Javascript
             next if NO_EVENTS_FOR_ELEMENTS.include? element['tag_name'].to_sym
 
             attributes = element['attributes']
-            element['events'] =
-                element['events'].map { |event, fn| [event.to_sym, fn] } |
-                    (self.class.events.flatten.map(&:to_s) & attributes.keys).
-                        map { |event| [event.to_sym, attributes[event]] }
+
+            element['events'] = (element['events'].map do |event, fn|
+                next if !(self.class.event_whitelist.include?( event ) ||
+                    self.class.event_whitelist.include?( "on#{event}" ))
+
+                [event.to_sym, fn]
+            end.compact)
+
+            element['events'] |= self.class.select_event_attributes( attributes ).to_a
 
             element
         end.compact
@@ -316,58 +356,162 @@ class Javascript
     # @param    [HTTP::Response]    response
     #   Installs our custom JS interfaces in the given `response`.
     #
-    # @return   [Bool]
-    #   `true` if injection was performed, `false` otherwise (in case our code
-    #   is already present).
-    #
     # @see SCRIPT_BASE_URL
     # @see SCRIPT_LIBRARY
     def inject( response )
-        return false if has_js_initializer?( response )
+        # Don't intercept our own stuff!
+        return if response.url.start_with?( SCRIPT_BASE_URL )
 
-        body = response.body.dup
+        # If it's a JS file, update our JS interfaces in case it has stuff that
+        # can be tracked.
+        #
+        # This is necessary because new files can be required dynamically.
+        if javascript?( response )
 
-        # If we've got no taint to trace don't bother...
-        if @taint
-            # Schedule a tracer update at the beginning of each script block in order
-            # to put our hooks into any newly introduced functions.
-            #
-            # The fact that our update call seems to be taking place before any
-            # functions get the chance to be defined doesn't seem to matter.
+            response.body = <<-EOCODE
+                #{js_comment}
+                #{taint_tracer.stub.function( :update_tracers )};
+                #{dom_monitor.stub.function( :update_trackers )};
+
+                #{response.body};
+            EOCODE
+
+        # Already has the JS initializer, so it's an HTML response; just update
+        # taints and custom code.
+        elsif has_js_initializer?( response )
+
+            body = response.body.dup
+
+            update_taints( body )
+            update_custom_code( body )
+
+            response.body = body
+
+        elsif html?( response )
+            body = response.body.dup
+
+            # Perform an update before each script.
             body.gsub!(
-                /<script(.*?)>/i,
-                "\\0\n#{@taint_tracer.stub.function( :update_tracers )}; // Injected by #{self.class}\n"
+                /<script.*?>/i,
+                "\\0\n
+                #{js_comment}
+                #{@taint_tracer.stub.function( :update_tracers )};
+                #{@dom_monitor.stub.function( :update_trackers )};\n\n"
             )
 
-            # Also perform an update after each script block, this is for external
-            # scripts.
+            # Perform an update after each script.
             body.gsub!(
                 /<\/script>/i,
-                "\\0\n<script type=\"text/javascript\">#{@taint_tracer.stub.function( :update_tracers )}" <<
-                    "</script> <!-- Script injected by #{self.class} -->\n"
+                "\\0\n<script type=\"text/javascript\">" <<
+                    "#{@taint_tracer.stub.function( :update_tracers )};" <<
+                    "#{@dom_monitor.stub.function( :update_trackers )};" <<
+                    "</script> #{html_comment}\n"
             )
+
+            # Include and initialize our JS interfaces.
+            response.body = <<-EOHTML
+<script src="#{script_url_for( :taint_tracer )}"></script> #{html_comment}
+<script src="#{script_url_for( :dom_monitor )}"></script> #{html_comment}
+<script>
+#{wrapped_taint_tracer_initializer}
+#{js_initialization_signal};
+
+#{wrapped_custom_code}
+</script> #{html_comment}
+
+#{body}
+            EOHTML
         end
 
-        response.body = <<-EOHTML
-            <script src="#{script_url_for( :taint_tracer )}"></script> <!-- Script injected by #{self.class} -->
-            <script> #{@taint_tracer.stub.function( :initialize, @taint )} </script> <!-- Script injected by #{self.class} -->
+        response.headers['content-length'] = response.body.size
 
-            <script src="#{script_url_for( :dom_monitor )}"></script> <!-- Script injected by #{self.class} -->
-            <script>
-                #{@dom_monitor.stub.function( :initialize )};
-                #{js_initialization_signal};
+        true
+    end
 
-                #{custom_code}
-            </script> <!-- Script injected by #{self.class} -->
+    def javascript?( response )
+        response.headers.content_type.to_s.downcase.include?( 'javascript' )
+    end
 
-            #{body}
-        EOHTML
+    def html?( response )
+        return false if response.body.empty?
 
-        response.headers['content-length'] = response.body.bytesize
+        # We only care about HTML.
+        return false if !response.headers.content_type.to_s.downcase.start_with?( 'text/html' )
+
+        # Let's check that the response at least looks like it contains HTML
+        # code of interest.
+        body = response.body.downcase
+        return false if !HTML_IDENTIFIERS.find { |tag| body.include? tag.downcase }
+
+        # The last check isn't fool-proof, so don't do it when loading the page
+        # for the first time, but only when the page loads stuff via AJAX and whatnot.
+        #
+        # Well, we can be pretty sure that the root page will be HTML anyways.
+        return true if @browser.last_url == response.url
+
+        # Finally, verify that we're really working with markup (hopefully HTML)
+        # and that the previous checks weren't just flukes matching some other
+        # kind of document.
+        #
+        # For example, it may have been JSON with the wrong content-type that
+        # includes HTML -- it happens.
+        begin
+            return false if Nokogiri::XML( response.body ).children.empty?
+        rescue => e
+            print_debug "Does not look like HTML: #{response.url}"
+            print_debug "\n#{response.body}"
+            print_debug_exception e
+            return false
+        end
+
         true
     end
 
     private
+
+    def js_comment
+        "// Injected by #{self.class}"
+    end
+
+    def html_comment
+        "<!-- Injected by #{self.class} -->"
+    end
+
+    def taints
+        taints = [@taint]
+
+        # Include cookie names and values in the trace so that the browser will
+        # be able to infer if they're being used, to avoid unnecessary audits.
+        if Options.audit.cookie_doms?
+            taints |= HTTP::Client.cookies.map { |c| c.inputs.to_a }.flatten
+        end
+
+        taints.flatten.reject { |v| v.to_s.empty? }
+    end
+
+    def update_taints( body )
+        body.gsub!(
+            /\/\* #{token}_initialize_start \*\/(.*)\/\* #{token}_initialize_stop \*\//,
+            wrapped_taint_tracer_initializer
+        )
+    end
+
+    def update_custom_code( body )
+        body.gsub!(
+            /\/\* #{token}_code_start \*\/(.*)\/\* #{token}_code_stop \*\//,
+            wrapped_custom_code
+        )
+    end
+
+    def wrapped_taint_tracer_initializer
+        "/* #{token}_initialize_start */ " <<
+            "#{@taint_tracer.stub.function( :initialize, taints )} " <<
+            "/* #{token}_initialize_stop */"
+    end
+
+    def wrapped_custom_code
+        "/* #{token}_code_start */ #{custom_code} /* #{token}_code_stop */"
+    end
 
     def js_initialization_signal
         "window._#{token} = true"

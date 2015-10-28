@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -51,6 +51,15 @@ module Check
 
     private
 
+    def run_checks( checks, page )
+        ran = false
+        checks.values.each do |check|
+            ran = true if check_page( check, page )
+        end
+        harvest_http_responses if ran
+        ran
+    end
+
     # Passes a page to the check and runs it.
     # It also handles any exceptions thrown by the check at runtime.
     #
@@ -58,11 +67,12 @@ module Check
     #   Check to run.
     # @param    [Page]    page
     def check_page( check, page )
+        ps = page.platforms.to_a
+
         # If we've been given platforms which the check doesn't support don't
         # even bother running it.
-        if !check.supports_platforms?( Options.platforms )
-            print_info "Check #{check.shortname} does not support: " <<
-                           Options.platforms.join( ', ' )
+        if !check.supports_platforms?( ps )
+            print_info "Check #{check.shortname} does not support: #{ps.join( ' + ' )}"
             return false
         end
 
@@ -70,6 +80,7 @@ module Check
             @checks.run_one( check, page )
         rescue => e
             print_error "Error in #{check.to_s}: #{e.to_s}"
+            print_error "Page: #{page.dom.url}"
             print_error_backtrace e
             false
         end

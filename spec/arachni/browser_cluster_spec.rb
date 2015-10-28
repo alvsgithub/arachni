@@ -18,25 +18,12 @@ describe Arachni::BrowserCluster do
     end
 
     describe '#initialize' do
-        describe :pool_size do
-            it 'sets the amount of browsers to instantiate' do
-                @cluster = described_class.new( pool_size: 3 )
-                @cluster.workers.size.should == 3
-            end
-
-            it "defaults to #{Arachni::OptionGroups::BrowserCluster}#pool_size" do
-                Arachni::Options.browser_cluster.pool_size = 10
-                @cluster = described_class.new
-                @cluster.workers.size.should == 10
-            end
-        end
-
         it "sets window width to #{Arachni::OptionGroups::BrowserCluster}#screen_width" do
             Arachni::Options.browser_cluster.screen_width = 100
 
             @cluster = described_class.new
             @cluster.workers.each do |browser|
-                browser.javascript.run('return window.innerWidth').should == 100
+                expect(browser.javascript.run('return window.innerWidth')).to eq(100)
             end
         end
 
@@ -45,8 +32,94 @@ describe Arachni::BrowserCluster do
 
             @cluster = described_class.new
             @cluster.workers.each do |browser|
-                browser.javascript.run('return window.innerHeight').should == 200
+                expect(browser.javascript.run('return window.innerHeight')).to eq(200)
             end
+        end
+
+        describe :pool_size do
+            it 'sets the amount of browsers to instantiate' do
+                @cluster = described_class.new( pool_size: 3 )
+                expect(@cluster.workers.size).to eq(3)
+            end
+
+            it "defaults to #{Arachni::OptionGroups::BrowserCluster}#pool_size" do
+                Arachni::Options.browser_cluster.pool_size = 10
+                @cluster = described_class.new
+                expect(@cluster.workers.size).to eq(10)
+            end
+        end
+
+        describe :on_pop do
+            it 'assigns blocks to be passed each poped job' do
+                cj = nil
+                @cluster = described_class.new(
+                    on_pop: proc do |j|
+                        cj = j
+                    end
+                )
+
+                @cluster.queue( job ){}
+                @cluster.wait
+
+                expect(cj.id).to eq(job.id)
+            end
+        end
+
+        describe :on_queue do
+            it 'assigns blocks to be passed each queued job' do
+                cj = nil
+                @cluster = described_class.new(
+                    on_queue: proc do |j|
+                        cj = j
+                    end
+                )
+
+                @cluster.queue( job ){}
+
+                expect(cj.id).to eq(job.id)
+                @cluster.wait
+            end
+        end
+
+        describe :on_job_done do
+            it 'assigns blocks to be passed each finished job' do
+                cj = nil
+                @cluster = described_class.new(
+                    on_job_done: proc do |j|
+                        cj = j
+                    end
+                )
+
+                @cluster.queue( job ){}
+                @cluster.wait
+
+                expect(cj.id).to eq(job.id)
+            end
+        end
+    end
+
+    describe '.statistics' do
+        it 'includes :queued_job_count' do
+            @cluster = described_class.new
+
+            current = described_class.statistics[:queued_job_count]
+            @cluster.with_browser{}
+            @cluster.with_browser{}
+            @cluster.with_browser{}
+
+            expect(described_class.statistics[:queued_job_count] - current).to eq 3
+        end
+
+        it 'includes :completed_job_count' do
+            @cluster = described_class.new
+
+            current = described_class.statistics[:completed_job_count]
+            @cluster.with_browser{}
+            @cluster.with_browser{}
+            @cluster.with_browser{}
+            @cluster.wait
+
+            expect(described_class.statistics[:completed_job_count] - current).to eq 3
         end
     end
 
@@ -60,7 +133,7 @@ describe Arachni::BrowserCluster do
             end
             @cluster.wait
 
-            worker.should be_kind_of described_class::Worker
+            expect(worker).to be_kind_of described_class::Worker
         end
     end
 
@@ -74,14 +147,14 @@ describe Arachni::BrowserCluster do
             end
             @cluster.wait
 
-            pages.first.body.should include "window._#{@cluster.javascript_token}"
+            expect(pages.first.body).to include "window._#{@cluster.javascript_token}"
         end
     end
 
     describe '#pending_job_counter' do
         it 'returns the amount of pending jobs' do
             @cluster = described_class.new
-            @cluster.pending_job_counter.should == 0
+            expect(@cluster.pending_job_counter).to eq(0)
 
             while_in_progress = []
             @cluster.queue( job ) do
@@ -89,12 +162,12 @@ describe Arachni::BrowserCluster do
             end
             @cluster.wait
 
-            while_in_progress.should be_any
+            expect(while_in_progress).to be_any
             while_in_progress.each do |pending_job_counter|
-                pending_job_counter.should > 0
+                expect(pending_job_counter).to be > 0
             end
 
-            @cluster.pending_job_counter.should == 0
+            expect(@cluster.pending_job_counter).to eq(0)
         end
     end
 
@@ -104,7 +177,7 @@ describe Arachni::BrowserCluster do
             @cluster = described_class.new
 
             @cluster.queue( job ) do |result|
-                result.job.id.should == job.id
+                expect(result.job.id).to eq(job.id)
                 pages << result.page
             end
             @cluster.wait
@@ -127,10 +200,10 @@ describe Arachni::BrowserCluster do
             end
             @cluster.wait
 
-            results.size.should == 1
+            expect(results.size).to eq(1)
             result = results.first
-            result.my_data.should == 'Some stuff'
-            result.job.id.should == custom_job.id
+            expect(result.my_data).to eq('Some stuff')
+            expect(result.job.id).to eq(custom_job.id)
         end
 
         context 'when no callback has been provided' do
@@ -155,7 +228,7 @@ describe Arachni::BrowserCluster do
 
                     job.never_ending = true
                     @cluster.queue( job ) do |result|
-                        result.job.never_ending?.should be_true
+                        expect(result.job.never_ending?).to be_truthy
                         pages << result.page
                     end
                     @cluster.wait
@@ -163,11 +236,11 @@ describe Arachni::BrowserCluster do
 
                     pages = []
                     @cluster.queue( job ) do |result|
-                        result.job.never_ending?.should be_true
+                        expect(result.job.never_ending?).to be_truthy
                         pages << result.page
                     end
                     @cluster.wait
-                    pages.should be_empty
+                    expect(pages).to be_empty
                 end
             end
         end
@@ -389,7 +462,7 @@ describe Arachni::BrowserCluster do
             end
             @cluster.wait
 
-            calls.should > 1
+            expect(calls).to be > 1
 
             @cluster.shutdown
 
@@ -401,7 +474,7 @@ describe Arachni::BrowserCluster do
             end
             @cluster.wait
 
-            calls.should == 1
+            expect(calls).to eq(1)
         end
 
         it 'returns true' do
@@ -413,7 +486,7 @@ describe Arachni::BrowserCluster do
             end
             @cluster.wait
 
-            return_val.should == true
+            expect(return_val).to eq(true)
         end
     end
 
@@ -424,7 +497,7 @@ describe Arachni::BrowserCluster do
                 @cluster.queue( job ) {}
                 @cluster.wait
 
-                @cluster.job_done?( job ).should == true
+                expect(@cluster.job_done?( job )).to eq(true)
             end
         end
 
@@ -433,7 +506,7 @@ describe Arachni::BrowserCluster do
                 @cluster = described_class.new
                 @cluster.queue( job ) { }
 
-                @cluster.job_done?( job ).should == false
+                expect(@cluster.job_done?( job )).to eq(false)
             end
         end
 
@@ -445,7 +518,7 @@ describe Arachni::BrowserCluster do
                 @cluster.queue( job ) {}
                 @cluster.wait
 
-                @cluster.job_done?( job ).should == false
+                expect(@cluster.job_done?( job )).to eq(false)
             end
         end
 
@@ -453,7 +526,7 @@ describe Arachni::BrowserCluster do
             it 'returns true' do
                 @cluster = described_class.new
                 @cluster.job_done( job )
-                @cluster.job_done?( job ).should == true
+                expect(@cluster.job_done?( job )).to eq(true)
             end
         end
 
@@ -474,16 +547,16 @@ describe Arachni::BrowserCluster do
                 pages << result.page
             end
 
-            pages.should be_empty
-            @cluster.done?.should be_false
+            expect(pages).to be_empty
+            expect(@cluster.done?).to be_falsey
             @cluster.wait
-            @cluster.done?.should be_true
-            pages.should be_any
+            expect(@cluster.done?).to be_truthy
+            expect(pages).to be_any
         end
 
         it 'returns self' do
             @cluster = described_class.new
-            @cluster.wait.should == @cluster
+            expect(@cluster.wait).to eq(@cluster)
         end
 
         context 'when the cluster has ben shutdown' do
@@ -500,7 +573,7 @@ describe Arachni::BrowserCluster do
             it 'returns false' do
                 @cluster = described_class.new
                 @cluster.queue( job ) {}
-                @cluster.done?.should be_false
+                expect(@cluster.done?).to be_falsey
             end
         end
 
@@ -508,9 +581,9 @@ describe Arachni::BrowserCluster do
             it 'returns true' do
                 @cluster = described_class.new
                 @cluster.queue( job ) {}
-                @cluster.done?.should be_false
+                expect(@cluster.done?).to be_falsey
                 @cluster.wait
-                @cluster.done?.should be_true
+                expect(@cluster.done?).to be_truthy
             end
         end
 
@@ -529,14 +602,14 @@ describe Arachni::BrowserCluster do
             @cluster.queue( job ) {}
             @cluster.wait
 
-            @cluster.sitemap.
-                reject { |k, v| k.start_with? Arachni::Browser::Javascript::SCRIPT_BASE_URL }.
-                should == {
+            expect(@cluster.sitemap.
+                reject { |k, v| k.start_with? Arachni::Browser::Javascript::SCRIPT_BASE_URL }).
+                to eq({
                     "#{url}explore"   => 200,
                     "#{url}post-ajax" => 404,
                     "#{url}href-ajax" => 200,
                     "#{url}get-ajax?ajax-token=my-token" => 200
-                }
+                })
         end
     end
 

@@ -1,6 +1,8 @@
 require 'sinatra'
 require 'sinatra/contrib'
 
+JS_LIB = "#{File.dirname( __FILE__ )}/"
+
 get '/' do
     <<HTML
     <html>
@@ -12,7 +14,7 @@ get '/digest' do
     <<HTML
     <html>
         <body onload='void();'>
-            <div id="my-id-div">
+            <div id="my-id-div" data-arachni-id="18181">
                 <div class="my-class-div">
                     <p>Hey <strong>Joe</strong>!</p>
                     <em>blah em</em>
@@ -25,6 +27,29 @@ get '/digest' do
                 </script>
 
                 <a href='#stuff'>Click me!</a>
+            </div>
+        </body>
+    </html>
+HTML
+end
+
+get '/digest/p' do
+    <<HTML
+    <html>
+        <body>
+            <p>Hey <strong>Joe</strong>!</p>
+        </body>
+    </html>
+HTML
+end
+
+get '/digest/data-arachni-id' do
+    <<HTML
+    <html>
+        <body>
+            <div id="my-id-div" data-arachni-id="18181">
+                <div class="my-class-div">
+                </div>
             </div>
         </body>
     </html>
@@ -62,11 +87,21 @@ get '/intervals' do
 HTML
 end
 
-get '/elements_with_events' do
+get '/elements_with_events/attributes' do
     <<HTML
-    <button onclick="handler_1()" id="my-button">Click me</button>
-    <button onclick="handler_2()" id="my-button2">Click me too</button>
-    <button onclick="handler_3()" id="my-button3">Don't bother clicking me</button>
+    <body>
+        <button onclick="handler_1()" id="my-button">Click me</button>
+        <button onclick="handler_2()" id="my-button2">Click me too</button>
+        <button onclick="handler_3()" id="my-button3">Don't bother clicking me</button>
+    </body>
+HTML
+end
+
+get '/elements_with_events/listeners' do
+    <<HTML
+    <button id="my-button">Click me</button>
+    <button id="my-button2">Click me too</button>
+    <button id="my-button3">Don't bother clicking me</button>
 
     <script>
         document.getElementById( "my-button" ).addEventListener( "click", function( my_button_click ){}, false );
@@ -78,6 +113,121 @@ get '/elements_with_events' do
 HTML
 end
 
+get '/elements_with_events/listeners/custom' do
+    <<HTML
+    <button id="my-button">Click me</button>
+
+    <script>
+        document.getElementById( "my-button" ).addEventListener( "custom_event", function(){}, false );
+    </script>
+HTML
+end
+
+get '/elements_with_events/jQuery.on' do
+    <<HTML
+    <script src="/jquery.js"></script>
+
+    <body>
+        <button id="my-button">Click me</button>
+    </body>
+
+    <script>
+        $('#my-button').on( 'click', function (){});
+    </script>
+HTML
+end
+
+get '/elements_with_events/jQuery.on-object-types' do
+    <<HTML
+    <script src="/jquery.js"></script>
+
+    <body>
+        <button id="my-button">Click me</button>
+    </body>
+
+    <script>
+        $('#my-button').on({
+            click: function (){},
+            hover: function (){}
+        });
+    </script>
+HTML
+end
+
+get '/elements_with_events/jQuery.on-selector' do
+    <<HTML
+    <script src="/jquery.js"></script>
+
+    <body id='body'>
+        <script>
+            $('body').on( 'click', '#my-button', function (){
+
+            });
+
+            $('body').on( 'hover', '#my-button', function (){
+
+            });
+
+            $('body').on( 'click', '#my-button-2', function (){
+
+            });
+        </script>
+
+        <button id="my-button">Click me</button>
+        <button id="my-button-2">Click me</button>
+    </body>
+HTML
+end
+
+get '/elements_with_events/jQuery.on-object-types-selector' do
+    <<HTML
+    <script src="/jquery.js"></script>
+
+    <body id='body'>
+        <script>
+            $('body').on({
+                click: function (){},
+                hover: function (){}
+            }, '#my-button');
+        </script>
+
+        <button id="my-button">Click me</button>
+        <button id="my-button-2">Click me</button>
+    </body>
+HTML
+end
+
+get '/elements_with_events/jQuery.delegate' do
+    <<HTML
+    <script src="/jquery.js"></script>
+
+    <body id='body'>
+        <script>
+            $('body').delegate( '#my-button', 'click', function (){});
+        </script>
+
+        <button id="my-button">Click me</button>
+    </body>
+HTML
+end
+
+get '/elements_with_events/jQuery.delegate-object-types' do
+    <<HTML
+    <script src="/jquery.js"></script>
+
+    <body id='body'>
+        <script>
+            $('body').delegate( '#my-button', {
+                click: function (){},
+                hover: function (){}
+            });
+        </script>
+
+        <button id="my-button">Click me</button>
+    </body>
+HTML
+end
+
 get '/elements_with_events/with-hidden' do
     <<HTML
     <button onclick="handler_1()" id="my-button">Click me</button>
@@ -85,6 +235,18 @@ get '/elements_with_events/with-hidden' do
 
     <script>
         document.getElementById( "my-button" ).addEventListener( "click", function( my_button_click ){}, false );
+    </script>
+HTML
+end
+
+get '/elements_with_events/custom-dot-delimited' do
+    <<HTML
+    <script src="/jquery.js"></script>
+
+    <button id="my-button">Click me</button>
+
+    <script>
+        $('#my-button').on( 'click.stuff', function (){});
     </script>
 HTML
 end
@@ -102,4 +264,9 @@ get '/set_element_ids' do
         document.getElementsByTagName( "a" )[1].addEventListener( "click", function(){}, false )
     </script>
 HTML
+end
+
+get '/jquery.js' do
+    content_type 'text/javascript'
+    IO.read "#{JS_LIB}/jquery-2.0.3.js"
 end

@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -7,7 +7,6 @@
 =end
 
 require_relative 'base'
-require_relative 'capabilities/with_node'
 
 module Arachni::Element
 
@@ -17,10 +16,21 @@ module Arachni::Element
 class Link < Base
     require_relative 'link/dom'
 
-    include Capabilities::WithNode
+    # Load and include all link-specific capability overrides.
+    lib = "#{File.dirname( __FILE__ )}/#{File.basename(__FILE__, '.rb')}/capabilities/**/*.rb"
+    Dir.glob( lib ).each { |f| require f }
+
+    # Generic element capabilities.
+    include Arachni::Element::Capabilities::WithNode
+    include Arachni::Element::Capabilities::Mutable
+    include Arachni::Element::Capabilities::Inputtable
+    include Arachni::Element::Capabilities::Analyzable
+    include Arachni::Element::Capabilities::Refreshable
+
+    # Link-specific overrides.
     include Capabilities::WithDOM
-    include Capabilities::Analyzable
-    include Capabilities::Refreshable
+    include Capabilities::Submittable
+    include Capabilities::Auditable
 
     # @param    [Hash]    options
     # @option   options [String]    :url
@@ -37,31 +47,10 @@ class Link < Base
         @default_inputs = self.inputs.dup.freeze
     end
 
-    # @return   [DOM]
-    def dom
-        return @dom if @dom
-        return if !dom_data
-
-        super
-    end
-
     # @return   [Hash]
     #   Simple representation of self in the form of `{ {#action} => {#inputs} }`.
     def simple
         { self.action => self.inputs }
-    end
-
-    # @note Will {Arachni::Options.rewrite} the `url`.
-    # @note Will update the {#inputs} from the URL query.
-    #
-    # @param   (see Capabilities::Submittable#action=)
-    #
-    # @return  (see Capabilities::Submittable#action=)
-    def action=( url )
-        rewritten   = uri_parse( url ).rewrite
-        self.inputs = rewritten.query_parameters.merge( self.inputs || {} )
-
-        super rewritten.without_query
     end
 
     # @return   [String]
@@ -69,17 +58,9 @@ class Link < Base
     def to_s
         uri = uri_parse( self.action ).dup
         uri.query = self.inputs.
-            map { |k, v| "#{encode_query_params(k)}=#{encode_query_params(v)}" }.
+            map { |k, v| "#{encode(k)}=#{encode(v)}" }.
             join( '&' )
         uri.to_s
-    end
-
-    # @param   (see .encode_query_params)
-    # @return  (see .encode_query_params)
-    #
-    # @see .encode_query_params
-    def encode_query_params( *args )
-        self.class.encode_query_params( *args )
     end
 
     # @param   (see .encode)
@@ -96,10 +77,6 @@ class Link < Base
     # @see .decode
     def decode( *args )
         self.class.decode( *args )
-    end
-
-    def coverage_id
-        dom_data ? "#{super}:#{dom_data[:inputs].keys.sort}" : super
     end
 
     def id
@@ -132,7 +109,14 @@ class Link < Base
         #
         # @return   [Array<Link>]
         def from_document( url, document )
-            document = Nokogiri::HTML( document.to_s ) if !document.is_a?( Nokogiri::HTML::Document )
+            if !document.is_a?( Nokogiri::HTML::Document )
+                document = document.to_s
+
+                return [] if !(document =~ /\?.*=/)
+
+                document = Nokogiri::HTML( document )
+            end
+
             base_url =  begin
                 document.search( '//base[@href]' )[0]['href']
             rescue
@@ -140,6 +124,8 @@ class Link < Base
             end
 
             document.search( '//a' ).map do |link|
+                next if too_big?( link['href'] )
+
                 href = to_absolute( link['href'], base_url )
                 next if !href
 
@@ -150,17 +136,13 @@ class Link < Base
                 new(
                     url:    url.freeze,
                     action: href.freeze,
-                    html:   link.to_html.freeze
+                    source: link.to_html.freeze
                 )
             end.compact
         end
 
-        def encode_query_params( param )
-            encode( encode( param ), '=' )
-        end
-
-        def encode( *args )
-            ::URI.encode( *args )
+        def encode( string )
+            Arachni::HTTP::Request.encode string
         end
 
         def decode( *args )
@@ -170,14 +152,6 @@ class Link < Base
 
 
     private
-
-    def dom_data
-        return @dom_data if @dom_data
-        return if @dom_data == false
-        return if !node
-
-        @dom_data ||= (DOM.data_from_node( node ) || false)
-    end
 
     def http_request( opts, &block )
         self.method != :get ?

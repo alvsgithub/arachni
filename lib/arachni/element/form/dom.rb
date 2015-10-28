@@ -1,38 +1,45 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
     web site for more information on licensing and terms of use.
 =end
 
+require_relative '../dom'
+
 module Arachni::Element
 class Form
 
-# Provides access to DOM operations for {Form forms}.
+# Extends {Arachni::Element::Capabilities::Auditable::DOM} with {Form}-specific
+# functionality.
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-class DOM < Base
-    include Capabilities::Auditable::DOM
+class DOM < DOM
+    include Arachni::Element::Capabilities::WithNode
+
+    include Arachni::Element::DOM::Capabilities::Mutable
+    include Arachni::Element::DOM::Capabilities::Inputtable
+    include Arachni::Element::DOM::Capabilities::Submittable
+    include Arachni::Element::DOM::Capabilities::Auditable
 
     def initialize( options )
         super
 
-        self.inputs     = (options[:inputs] || self.parent.inputs).dup
+        inputs = (options[:inputs] || self.parent.inputs).dup
+        @valid_input_names = inputs.keys.map(&:to_s)
+
+        self.inputs     = inputs
         @default_inputs = self.inputs.dup.freeze
     end
 
     # Submits the form using the configured {#inputs}.
     def trigger
-        browser.fire_event element, :submit, inputs: inputs.dup
+        [ browser.fire_event( element, :submit, inputs: inputs.dup ) ]
     end
 
-    def encode( *args )
-        Form.encode( *args )
-    end
-
-    def decode( *args )
-        Form.decode( *args )
+    def valid_input_name?( name )
+        @valid_input_names.include? name.to_s
     end
 
     def type

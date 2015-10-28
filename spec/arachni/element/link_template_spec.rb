@@ -4,9 +4,26 @@ describe Arachni::Element::LinkTemplate do
     html = "<a href='http://test.com/#/param/val'>stuff</a>"
 
     it_should_behave_like 'element'
-    it_should_behave_like 'with_node', html
+    it_should_behave_like 'with_node'
     it_should_behave_like 'with_dom',  html
+    it_should_behave_like 'with_source'
+    it_should_behave_like 'with_auditor'
+
+    it_should_behave_like 'submittable'
+    it_should_behave_like 'inputtable'
+    it_should_behave_like 'mutable'
     it_should_behave_like 'auditable'
+
+    before :each do
+        @framework ||= Arachni::Framework.new
+        @auditor     = Auditor.new( Arachni::Page.from_url( url ), @framework )
+    end
+
+    after :each do
+        @framework.reset
+    end
+
+    let(:auditor) { @auditor }
 
     before :each do
         Arachni::Options.audit.link_templates = /param\/(?<param>\w+)/
@@ -27,7 +44,8 @@ describe Arachni::Element::LinkTemplate do
     subject do
         described_class.new(
             url:      url_with_inputs,
-            template: template
+            template: template,
+            source:   html
         )
     end
     let(:inputtable) do
@@ -48,29 +66,29 @@ describe Arachni::Element::LinkTemplate do
         describe :options do
             describe :template do
                 it 'sets the #template' do
-                    described_class.new(
+                    expect(described_class.new(
                         url:      url_with_inputs,
                         template: template
-                    ).template.should == template
+                    ).template).to eq(template)
                 end
             end
 
             describe :inputs do
                 it 'sets the #inputs' do
-                    described_class.new(
+                    expect(described_class.new(
                         url:      url_with_inputs,
                         inputs:   inputs,
                         template: template
-                    ).inputs.should == inputs
+                    ).inputs).to eq(inputs)
                 end
             end
 
             context 'when no :inputs are provided' do
                 it 'uses the given :template to extract them' do
-                    described_class.new(
+                    expect(described_class.new(
                         url:      url_with_inputs,
                         template: template
-                    ).inputs.should == inputs
+                    ).inputs).to eq(inputs)
                 end
 
                 context 'when no :template is provided' do
@@ -78,8 +96,8 @@ describe Arachni::Element::LinkTemplate do
                         Arachni::Options.audit.link_templates = template
 
                         l = described_class.new( url: url_with_inputs )
-                        l.inputs.should == inputs
-                        l.template.should == template
+                        expect(l.inputs).to eq(inputs)
+                        expect(l.template).to eq(template)
                     end
                 end
             end
@@ -88,39 +106,39 @@ describe Arachni::Element::LinkTemplate do
 
     describe '#simple' do
         it 'returns a simple hash representation' do
-            subject.simple.should == {
+            expect(subject.simple).to eq({
                 subject.action => subject.inputs
-            }
+            })
         end
     end
 
     describe '#valid_input_name?' do
         context 'when the name can be found in the #template named captures' do
             it 'returns true' do
-                subject.template.names.should be_any
+                expect(subject.template.names).to be_any
 
                 subject.template.names.each do |name|
-                    subject.valid_input_name?( name ).should be_true
+                    expect(subject.valid_input_name?( name )).to be_truthy
                 end
             end
         end
 
         context 'when the name cannot be found in the #template named captures' do
             it 'returns false' do
-                subject.valid_input_name?( 'stuff' ).should be_false
+                expect(subject.valid_input_name?( 'stuff' )).to be_falsey
             end
         end
     end
 
     describe '#valid_input_data?' do
         it 'returns true' do
-            subject.valid_input_data?( 'stuff' ).should be_true
+            expect(subject.valid_input_data?( 'stuff' )).to be_truthy
         end
 
         described_class::INVALID_INPUT_DATA.each do |invalid_data|
             context "when the value contains #{invalid_data.inspect}" do
                 it 'returns false' do
-                    subject.valid_input_data?( "stuff #{invalid_data}" ).should be_false
+                    expect(subject.valid_input_data?( "stuff #{invalid_data}" )).to be_falsey
                 end
             end
         end
@@ -129,111 +147,107 @@ describe Arachni::Element::LinkTemplate do
     describe '#dom' do
         context 'when there are no DOM#inputs' do
             it 'returns nil' do
-                subject.html = '<a href="/stuff">Bla</a>'
-                subject.dom.should be_nil
+                subject.source = '<a href="/stuff">Bla</a>'
+                expect(subject.dom).to be_nil
             end
         end
 
         context 'when there is no #node' do
             it 'returns nil' do
-                subject.html = nil
-                subject.dom.should be_nil
+                subject.source = nil
+                expect(subject.dom).to be_nil
             end
         end
     end
 
     describe '#to_s' do
         it 'returns the updated link' do
-            inputtable.to_s.should == inputtable.action
+            expect(inputtable.to_s).to eq(inputtable.action)
 
             inputtable.inputs = {
                 'input1' => 'new value 1',
                 'input2' => 'new value 2'
             }
 
-            inputtable.to_s.should == "#{url}input1/new%20value%201/input2/new%20value%202"
+            expect(inputtable.to_s).to eq("#{url}input1/new%20value%201/input2/new%20value%202")
         end
     end
 
     describe '#coverage_id' do
         it "takes into account #{described_class::DOM}#template names" do
             e = subject.dup
-            e.html = "<a href='http://test.com/#/param/val'>stuff</a>"
+            e.source ="<a href='http://test.com/#/param/val'>stuff</a>"
 
             c = subject.dup
-            c.html = "<a href='http://test.com/#/param/val2'>stuff</a>"
+            c.source ="<a href='http://test.com/#/param/val2'>stuff</a>"
 
-            c.coverage_id.should == e.coverage_id
+            expect(c.coverage_id).to eq(e.coverage_id)
 
             e = subject.dup
-            e.html = "<a href='http://test.com/#/param/val'>stuff</a>"
+            e.source ="<a href='http://test.com/#/param/val'>stuff</a>"
 
             Arachni::Options.audit.link_templates << /param2\/(?<param2>\w+)/
 
             c = subject.dup
-            c.html = "<a href='http://test.com/#/param2/val'>stuff</a>"
+            c.source ="<a href='http://test.com/#/param2/val'>stuff</a>"
 
-            c.coverage_id.should_not == e.coverage_id
+            expect(c.coverage_id).not_to eq(e.coverage_id)
         end
     end
 
     describe '#id' do
         it "takes into account #{described_class::DOM}#inputs" do
             e = subject.dup
-            e.html = "<a href='http://test.com/#/param/val'>stuff</a>"
+            e.source ="<a href='http://test.com/#/param/val'>stuff</a>"
 
             c = subject.dup
-            c.html = "<a href='http://test.com/#/param/val'>stuff</a>"
+            c.source ="<a href='http://test.com/#/param/val'>stuff</a>"
 
-            c.id.should == e.id
+            expect(c.id).to eq(e.id)
 
             e = subject.dup
-            e.html = "<a href='http://test.com/#/param/val'>stuff</a>"
+            e.source ="<a href='http://test.com/#/param/val'>stuff</a>"
 
             c = subject.dup
-            c.html = "<a href='http://test.com/#/param/val1'>stuff</a>"
+            c.source ="<a href='http://test.com/#/param/val1'>stuff</a>"
 
-            c.id.should_not == e.id
+            expect(c.id).not_to eq(e.id)
 
             e = subject.dup
-            e.html = "<a href='http://test.com/#/param/val'>stuff</a>"
+            e.source ="<a href='http://test.com/#/param/val'>stuff</a>"
 
             c = subject.dup
-            c.html = "<a href='http://test.com/#/param2/val'>stuff</a>"
+            c.source ="<a href='http://test.com/#/param2/val'>stuff</a>"
 
-            c.id.should_not == e.id
+            expect(c.id).not_to eq(e.id)
         end
     end
 
     describe '#to_rpc_data' do
         it "does not include 'dom_data'" do
-            subject.html = html
-            subject.dom.should be_true
+            subject.source = html
+            expect(subject.dom).to be_truthy
 
-            subject.to_rpc_data.should_not include 'dom_data'
+            expect(subject.to_rpc_data).not_to include 'dom_data'
         end
     end
 
     describe '.encode' do
-        it "double encodes ';'" do
-            described_class.encode( 'test;' ).should == 'test%253B'
-        end
-
-        it "double encodes '/'" do
-            described_class.encode( 'test/' ).should == 'test%2F'
+        it 'URL-encodes the passed string' do
+            expect(described_class.encode( 'test/;' )).to eq('test%2F%3B')
         end
     end
 
     describe '.decode' do
         it 'URL-decodes the passed string' do
             v = '%25+value%5C+%2B%3D%26%3B'
-            described_class.decode( v ).should == URI.decode( v )
+            expect(described_class.decode( v )).to eq(URI.decode( v ))
         end
     end
     describe '#decode' do
         it 'URL-decodes the passed string' do
             v = '%25+value%5C+%2B%3D%26%3B'
-            subject.decode( v ).should == described_class.decode( v )
+            expect(subject.decode( v )).to eq(described_class.decode( v ))
         end
     end
 
@@ -243,11 +257,11 @@ describe Arachni::Element::LinkTemplate do
             templates = [/input1\/(?<input1>\w+)\/input2\/(?<input2>\w+)/]
 
             template, inputs = described_class.extract_inputs( url, templates )
-            templates.should == [template]
-            inputs.should == {
+            expect(templates).to eq([template])
+            expect(inputs).to eq({
                 'input1' => 'value1',
                 'input2' => 'value2'
-            }
+            })
         end
 
         it 'decodes the input values' do
@@ -255,15 +269,15 @@ describe Arachni::Element::LinkTemplate do
             templates = [/input1\/(?<input1>.+)\/input2\/(?<input2>.+)/]
 
             _, inputs = described_class.extract_inputs( url, templates )
-            inputs.should == {
+            expect(inputs).to eq({
                 'input1' => 'val ue1',
                 'input2' => 'val ue2'
-            }
+            })
         end
 
         context 'when no URL is given' do
             it 'returns an empty array' do
-                described_class.extract_inputs( nil ).should == []
+                expect(described_class.extract_inputs( nil )).to eq([])
             end
         end
 
@@ -275,12 +289,12 @@ describe Arachni::Element::LinkTemplate do
                 Arachni::Options.audit.link_templates = templates
 
                 template, inputs = described_class.extract_inputs( url )
-                inputs.should == {
+                expect(inputs).to eq({
                     'input1' => 'value1',
                     'input2' => 'value2'
-                }
+                })
 
-                [templates].should == [Arachni::Options.audit.link_templates]
+                expect([templates]).to eq([Arachni::Options.audit.link_templates])
             end
         end
 
@@ -289,14 +303,14 @@ describe Arachni::Element::LinkTemplate do
                 url       = "#{url}input3/value1/input4/value2"
                 templates = [/input1\/(?<input1>\w+)\/input2\/(?<input2>\w+)/]
 
-                described_class.extract_inputs( url, templates ).should == []
+                expect(described_class.extract_inputs( url, templates )).to eq([])
             end
         end
     end
 
     describe '.type' do
         it 'returns :link_template' do
-            described_class.type.should == :link_template
+            expect(described_class.type).to eq(:link_template)
         end
     end
 
@@ -313,11 +327,11 @@ describe Arachni::Element::LinkTemplate do
             )
 
             link = described_class.from_response( response ).first
-            link.action.should == url + 'test2/param/myvalue'
-            link.url.should == url
-            link.inputs.should == {
+            expect(link.action).to eq(url + 'test2/param/myvalue')
+            expect(link.url).to eq(url)
+            expect(link.inputs).to eq({
                 'param'  => 'myvalue'
-            }
+            })
         end
 
         context 'when the URL matches a link template' do
@@ -327,11 +341,11 @@ describe Arachni::Element::LinkTemplate do
                 )
 
                 link = described_class.from_response( response ).first
-                link.action.should == url + 'test2/param/myvalue'
-                link.url.should == link.action
-                link.inputs.should == {
+                expect(link.action).to eq(url + 'test2/param/myvalue')
+                expect(link.url).to eq(link.action)
+                expect(link.inputs).to eq({
                     'param'  => 'myvalue'
-                }
+                })
             end
         end
     end
@@ -339,7 +353,7 @@ describe Arachni::Element::LinkTemplate do
     describe '.from_document' do
         context 'when the response does not contain any link templates' do
             it 'returns an empty array' do
-                described_class.from_document( '', '' ).should be_empty
+                expect(described_class.from_document( '', '' )).to be_empty
             end
         end
         context 'when links have actions that are out of scope' do
@@ -356,8 +370,8 @@ describe Arachni::Element::LinkTemplate do
                 Arachni::Options.scope.exclude_path_patterns = [/exclude/]
 
                 links = described_class.from_document( url, html )
-                links.size.should == 1
-                links.first.action.should == url + 'test2/param/myvalue'
+                expect(links.size).to eq(1)
+                expect(links.first.action).to eq(url + 'test2/param/myvalue')
             end
         end
         context 'when the response contains link templates' do
@@ -370,11 +384,11 @@ describe Arachni::Element::LinkTemplate do
                 </html>'
 
                 link = described_class.from_document( url, html ).first
-                link.action.should == url + 'test2/param/myvalue'
-                link.url.should == url
-                link.inputs.should == {
+                expect(link.action).to eq(url + 'test2/param/myvalue')
+                expect(link.url).to eq(url)
+                expect(link.inputs).to eq({
                     'param'  => 'myvalue'
-                }
+                })
             end
 
             context 'and includes a base attribute' do
@@ -391,11 +405,11 @@ describe Arachni::Element::LinkTemplate do
                     </html>'
 
                     link = described_class.from_document( url, html ).first
-                    link.action.should == base_url + 'test/param/myvalue'
-                    link.url.should == url
-                    link.inputs.should == {
+                    expect(link.action).to eq(base_url + 'test/param/myvalue')
+                    expect(link.url).to eq(url)
+                    expect(link.inputs).to eq({
                         'param'  => 'myvalue'
-                    }
+                    })
                 end
             end
         end

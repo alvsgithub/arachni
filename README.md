@@ -1,17 +1,9 @@
-**NOTICE**:
-
-* Arachni's license has changed, please see the _LICENSE_ file before working
-    with the project.
-* v1.0 is not backwards compatible with v0.4.
-
-<hr/>
-
 # Arachni - Web Application Security Scanner Framework
 
 <table>
     <tr>
         <th>Version</th>
-        <td>1.0.6</td>
+        <td>1.3.2</td>
     </tr>
     <tr>
         <th>Homepage</th>
@@ -46,21 +38,20 @@
     </tr>
     <tr>
         <th>Copyright</th>
-        <td>2010-2014 Tasos Laskos</td>
+        <td>2010-2015 Tasos Laskos</td>
     </tr>
     <tr>
         <th>License</th>
-        <td>Dual-licensed (Apache License v2.0/Commercial) - (see LICENSE file)</td>
+        <td>Arachni Public Source License v1.0 - (see LICENSE file)</td>
     </tr>
 </table>
 
-![Arachni logo](http://arachni.github.com/arachni/logo.png)
+![Arachni logo](http://www.arachni-scanner.com/large-logo.png)
 
 ## Synopsis
 
-Arachni is an Open Source, feature-full, modular, high-performance Ruby framework
-aimed towards helping penetration testers and administrators evaluate the security
-of web applications.
+Arachni is a feature-full, modular, high-performance Ruby framework aimed towards
+helping penetration testers and administrators evaluate the security of web applications.
 
 It is smart, it trains itself by monitoring and learning from the web application's
 behavior during the scan process and is able to perform meta-analysis using a number of
@@ -123,11 +114,11 @@ you with its findings.
 
  - Cookie-jar/cookie-string support.
  - Custom header support.
- - SSL support.
+ - SSL support with fine-grained options.
  - User Agent spoofing.
  - Proxy support for SOCKS4, SOCKS4A, SOCKS5, HTTP/1.1 and HTTP/1.0.
  - Proxy authentication.
- - Site authentication (Automated form-based, Cookie-Jar, Basic-Digest, NTLMv1 and others).
+ - Site authentication (SSL-based, form-based, Cookie-Jar, Basic-Digest, NTLMv1, Kerberos and others).
  - Automatic log-out detection and re-login during the scan (when the initial
     login was performed via the `autologin`, `login_script` or `proxy` plugins).
  - Custom 404 page detection.
@@ -205,6 +196,8 @@ Configuration options include:
  - Ability to disable loading images.
  - Adjustable screen width and height.
      - Can be used to analyze responsive and mobile applications.
+ - Ability to wait until certain elements appear in the page.
+ - Configurable local storage data.
 
 ### Coverage
 
@@ -220,7 +213,12 @@ By inspecting all possible pages and their states (when using client-side code)
 Arachni is able to extract and audit the following elements and their inputs:
 
  - Forms
-    - Along with ones that require interaction with a real browser due to DOM events.
+    - Along with ones that require interaction via a real browser due to DOM events.
+ - User-interface Forms
+    - Input and button groups which don't belong to an HTML `<form>` element but
+        are instead associated via JS code.
+ - User-interface Inputs
+    - Orphan `<input>` elements with associated DOM events.
  - Links
     - Along with ones that have client-side parameters in their fragment, i.e.:
         `http://example.com/#/?param=val&param2=val2`
@@ -231,8 +229,10 @@ Arachni is able to extract and audit the following elements and their inputs:
             `http://example.com/#/param/val/param2/val2`
  - Cookies
  - Headers
- - Generic client-side elements like `input`s which have associated DOM events.
+ - Generic client-side elements which have associated DOM events.
  - AJAX-request parameters.
+ - JSON request data.
+ - XML request data.
 
 ### Open [distributed architecture](https://github.com/Arachni/arachni/wiki/Distributed-components)
 
@@ -285,6 +285,11 @@ Arachni is able to extract and audit the following elements and their inputs:
     - Forms
         - Can automatically refresh nonce tokens.
         - Can submit them via the integrated browser environment.
+     - User-interface Forms
+        - Input and button groups which don't belong to an HTML `<form>` element
+            but are instead associated via JS code.
+    - User-interface Inputs
+        - Orphan `<input>` elements with associated DOM events.
     - Links
         - Can load them via the integrated browser environment.
     - LinkTemplates
@@ -292,7 +297,9 @@ Arachni is able to extract and audit the following elements and their inputs:
     - Cookies
         - Can load them via the integrated browser environment.
     - Headers
-    - Generic client-side DOM elements like `input`s.
+    - Generic client-side DOM elements.
+    - JSON request data.
+    - XML request data.
  - Can ignore binary/non-text pages.
  - Can optionally audit elements using both `GET` and `POST` HTTP methods.
  - Can optionally submit all links and forms of the page along with the cookie
@@ -329,15 +336,24 @@ Currently, the following platforms can be identified:
     - Nginx
     - Tomcat
     - Jetty
+    - Gunicorn
 - Programming languages
     - PHP
     - ASP
     - ASPX
-    - JSP
+    - Java
     - Python
     - Ruby
 - Frameworks
     - Rack
+    - CakePHP
+    - Rails
+    - Django
+    - ASP.NET MVC
+    - JSF
+    - CherryPy
+    - Nette
+    - Symfony
 
 The user also has the option of specifying extra platforms (like a DB server)
 in order to help the system be as efficient as possible. Alternatively, fingerprinting
@@ -384,23 +400,23 @@ Active checks engage the web application via its inputs.
     - PHP
     - Ruby
     - Python
-    - JSP
-    - ASP.NET
+    - Java
+    - ASP
 - Blind code injection using timing attacks (`code_injection_timing`).
     - PHP
     - Ruby
     - Python
-    - JSP
-    - ASP.NET
+    - Java
+    - ASP
 - LDAP injection (`ldap_injection`).
 - Path traversal (`path_traversal`).
     - *nix
     - Windows
-    - Tomcat
+    - Java
 - File inclusion (`file_inclusion`).
     - *nix
     - Windows
-    - Tomcat
+    - Java
     - PHP
     - Perl
 - Response splitting (`response_splitting`).
@@ -416,6 +432,7 @@ Active checks engage the web application via its inputs.
     - Windows
 - Remote file inclusion (`rfi`).
 - Unvalidated redirects (`unvalidated_redirect`).
+- Unvalidated DOM redirects (`unvalidated_redirect_dom`).
 - XPath injection (`xpath_injection`).
     - Generic
     - PHP
@@ -428,9 +445,13 @@ Active checks engage the web application via its inputs.
 - XSS in HTML tags (`xss_tag`).
 - XSS in script context (`xss_script_context`).
 - DOM XSS (`xss_dom`).
-- DOM XSS inputs (`xss_dom_inputs`).
 - DOM XSS script context (`xss_dom_script_context`).
 - Source code disclosure (`source_code_disclosure`)
+- XML External Entity (`xxe`).
+    - Linux
+    - *BSD
+    - Solaris
+    - Windows
 
 ##### Passive
 
@@ -439,6 +460,7 @@ Passive checks look for the existence of files, folders and signatures.
 - Allowed HTTP methods (`allowed_methods`).
 - Back-up files (`backup_files`).
 - Backup directories (`backup_directories`)
+- Common administration interfaces (`common_admin_interfaces`).
 - Common directories (`common_directories`).
 - Common files (`common_files`).
 - HTTP PUT (`http_put`).
@@ -464,18 +486,23 @@ Passive checks look for the existence of files, folders and signatures.
 - localstart.asp (`localstart_asp`)
 - Cookie set for parent domain (`cookie_set_for_parent_domain`)
 - Missing `Strict-Transport-Security` headers for HTTPS sites (`hsts`).
+- Missing `X-Frame-Options` headers (`x_frame_options`).
+- Insecure CORS policy (`insecure_cors_policy`).
+- Insecure cross-domain policy (allow-access-from) (`insecure_cross_domain_policy_access`)
+- Insecure cross-domain policy (allow-http-request-headers-from) (`insecure_cross_domain_policy_headers`)
+- Insecure client-access policy (`insecure_client_access_policy`)
 
 #### Reporters
 
 - Standard output
-- [HTML](http://downloads.arachni-scanner.com/dev/reports/report.html/)
-    ([zip](http://downloads.arachni-scanner.com/dev/reports/report.html.zip)) (`html`).
-- [XML](http://downloads.arachni-scanner.com/dev/reports/report.xml) (`xml`).
-- [Text](http://downloads.arachni-scanner.com/dev/reports/report.txt) (`text`).
-- [JSON](http://downloads.arachni-scanner.com/dev/reports/report.json) (`json`)
-- [Marshal](http://downloads.arachni-scanner.com/dev/reports/report.marshal) (`marshal`)
-- [YAML](http://downloads.arachni-scanner.com/dev/reports/report.yml) (`yaml`)
-- [AFR](http://downloads.arachni-scanner.com/dev/reports/report.afr) (`afr`)
+- [HTML](http://www.arachni-scanner.com/reports/report.html/)
+    ([zip](http://www.arachni-scanner.com/reports/report.html.zip)) (`html`).
+- [XML](http://www.arachni-scanner.com/reports/report.xml) (`xml`).
+- [Text](http://www.arachni-scanner.com/reports/report.txt) (`text`).
+- [JSON](http://www.arachni-scanner.com/reports/report.json) (`json`)
+- [Marshal](http://www.arachni-scanner.com/reports/report.marshal) (`marshal`)
+- [YAML](http://www.arachni-scanner.com/reports/report.yml) (`yaml`)
+- [AFR](http://www.arachni-scanner.com/reports/report.afr) (`afr`)
     - The default Arachni Framework Report format.
 
 #### Plugins
@@ -503,6 +530,13 @@ core remains lean and makes it easy for anyone to add arbitrary functionality.
 - Uncommon headers (`uncommon_headers`) -- Logs uncommon headers.
 - Content-types (`content_types`) -- Logs content-types of server responses aiding in the
     identification of interesting (possibly leaked) files.
+- Vector collector (`vector_collector`) -- Collects information about all seen input vectors
+    which are within the scan scope.
+- Headers collector (`headers_collector`) -- Collects response headers based on specified criteria.
+- Exec (`exec`) -- Calls external executables at different scan stages.
+- Metrics (`metrics`) -- Captures metrics about multiple aspects of the scan and the web application.
+- Restrict to DOM state (`restrict_to_dom_state`) -- Restricts the audit to a single page's DOM
+    state, based on a URL fragment.
 
 ##### Defaults
 
@@ -511,7 +545,6 @@ Default plugins will run for every scan and are placed under `/plugins/defaults/
 - AutoThrottle (`autothrottle`) -- Dynamically adjusts HTTP throughput during the scan for
     maximum bandwidth utilization.
 - Healthmap (`healthmap`) -- Generates sitemap showing the health of each crawled/audited URL
-- Resolver (`resolver`) -- Resolves vulnerable hostnames to IP addresses.
 
 ###### Meta
 
@@ -583,11 +616,4 @@ need to follow in order to contribute code:
 
 ## License
 
-Dual-licensed (Apache License v2.0/Commercial) -- please see the _LICENSE_ file
-for more information.
-
-## Disclaimer
-
-This is free software and you are allowed to use it as you see fit.
-However, neither the development team nor any of our contributors can be held
-responsible for your actions nor for any damage caused by the use of this software.
+Arachni Public Source License v1.0 -- please see the _LICENSE_ file for more information.

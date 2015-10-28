@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -20,8 +20,26 @@ module Arachni::Element
 class Cookie < Base
     require_relative 'cookie/dom'
 
+    # Load and include all cookie-specific capability overrides.
+    lib = "#{File.dirname( __FILE__ )}/#{File.basename(__FILE__, '.rb')}/capabilities/**/*.rb"
+    Dir.glob( lib ).each { |f| require f }
+
+    # Generic element capabilities.
+    include Arachni::Element::Capabilities::Submittable
+    include Arachni::Element::Capabilities::Auditable
+    include Arachni::Element::Capabilities::Analyzable
+    include Arachni::Element::Capabilities::WithSource
+
+    # Cookie-specific overrides.
     include Capabilities::WithDOM
-    include Capabilities::Analyzable
+    include Capabilities::Inputtable
+    include Capabilities::Mutable
+
+    ENCODE_CHARACTERS      = ['+', ';', '%', "\0", '&', ' ', '"', "\n", "\r"]
+    ENCODE_CHARACTERS_LIST = ENCODE_CHARACTERS.join
+
+    ENCODE_CHARACTERS_IN_NAME      = ENCODE_CHARACTERS + ['=']
+    ENCODE_CHARACTERS_IN_NAME_LIST = ENCODE_CHARACTERS_IN_NAME.join
 
     # Default cookie values
     DEFAULT = {
@@ -66,7 +84,7 @@ class Cookie < Base
         end
 
         @data.merge!( DEFAULT.merge( @data ) )
-        @data[:value] = decode( @data[:value].to_s )
+        @data[:value] = decode( @data[:value].to_s ) rescue @data[:value].to_s
 
         parsed_uri = uri_parse( action )
         if !@data[:path]
@@ -82,17 +100,6 @@ class Cookie < Base
         @data[:domain] ||= parsed_uri.host
 
         @default_inputs = self.inputs.dup.freeze
-    end
-
-    # @return   [DOM]
-    def dom
-        return if @skip_dom || inputs.empty?
-
-        # In case the cookie already has input data not supported by its DOM
-        # extension.
-        @skip_dom = !try_input { super }
-
-        @dom
     end
 
     # Indicates whether the cookie must be only sent over an encrypted channel.
@@ -147,88 +154,6 @@ class Cookie < Base
         self.inputs.dup
     end
 
-    # @example
-    #    p c = Cookie.from_set_cookie( 'http://owner-url.com', 'session=stuffstuffstuff' ).first
-    #    #=> ["session=stuffstuffstuff"]
-    #
-    #    p c.inputs
-    #    #=> {"session"=>"stuffstuffstuff"}
-    #
-    #    p c.inputs = { 'new-name' => 'new-value' }
-    #    #=> {"new-name"=>"new-value"}
-    #
-    #    p c
-    #    #=> new-name=new-value
-    #
-    # @param    [Hash]  inputs
-    #   Sets inputs.
-    def inputs=( inputs )
-        k = inputs.keys.first.to_s
-        v = inputs.values.first.to_s
-
-        @data[:name]  = k
-        @data[:value] = v
-
-        if k.to_s.empty?
-            super( {} )
-        else
-            super( { k => v } )
-        end
-    end
-
-    # Overrides {Capabilities::Mutable#each_mutation} to handle cookie-specific
-    # limitations and the {Arachni::OptionGroups::Audit#cookies_extensively} option.
-    #
-    # @param (see Capabilities::Mutable#each_mutation)
-    # @return (see Capabilities::Mutable#each_mutation)
-    # @yield (see Capabilities::Mutable#each_mutation)
-    # @yieldparam (see Capabilities::Mutable#each_mutation)
-    #
-    # @see Capabilities::Mutable#each_mutation
-    def each_mutation( payload, opts = {}, &block )
-        opts        = opts.dup
-        flip        = opts.delete( :param_flip )
-        extensively = opts[:extensively]
-        extensively = Arachni::Options.audit.cookies_extensively? if extensively.nil?
-
-        super( payload, opts ) do |elem|
-            yield elem
-
-            next if !extensively
-            elem.each_extensive_mutation( elem, &block )
-        end
-
-        return if !flip
-
-        if !valid_input_name_data?( payload )
-            print_debug_level_2 'Payload not supported as input name by' <<
-                                    " #{audit_id}: #{payload.inspect}"
-            return
-        end
-
-        elem = self.dup
-        elem.affected_input_name = 'Parameter flip'
-        elem.inputs = { payload => seed }
-        yield elem if block_given?
-    end
-
-    def each_extensive_mutation( mutation )
-        return if orphan?
-
-        (auditor.page.links | auditor.page.forms).each do |e|
-            next if e.inputs.empty?
-
-            c = e.dup
-            c.affected_input_name = "mutation for the '#{name}' cookie"
-            c.auditor = auditor
-            c.audit_options[:submit] ||= {}
-            c.audit_options[:submit][:cookies] = mutation.inputs.dup
-            c.inputs = Arachni::Options.input.fill( c.inputs.dup )
-
-            yield c
-        end
-    end
-
     # Uses the method name as a key to cookie attributes in {DEFAULT}.
     def method_missing( sym, *args, &block )
         return @data[sym] if @data.include? sym
@@ -246,7 +171,7 @@ class Cookie < Base
     # @return   [String]
     #   To be used in a `Cookie` HTTP request header.
     def to_s
-        "#{encode( name, :name )}=#{encode( value )}"
+        "#{encode( name, true )}=#{encode( value )}"
     end
 
     # @return   [String]
@@ -275,25 +200,33 @@ class Cookie < Base
 
     def to_rpc_data
         h = super
-        if expires_at
-            h.merge(
-               'initialization_options' => h['initialization_options'].merge( expires: expires_at.to_s ),
-               'data'                   => h['data'].merge( expires: expires_at.to_s )
-            )
-        else
-            h
+
+        if h['initialization_options']['expires']
+            h['initialization_options']['expires'] =
+                h['initialization_options']['expires'].to_s
         end
+
+        h['data'] = h['data'].my_stringify_keys(false)
+        if h['data']['expires']
+            h['data']['expires'] = h['data']['expires'].to_s
+        end
+
+        h
     end
 
     class <<self
 
         def from_rpc_data( data )
-            if data['initialization_options']['expires'] &&
-                !data['initialization_options']['expires'].is_a?( Time )
-
+            if data['initialization_options']['expires']
                 data['initialization_options']['expires'] =
-                    Time.parse( data['initialization_options']['expires'] ) rescue nil
+                    Time.parse( data['initialization_options']['expires'] )
             end
+
+            if data['data']['expires']
+                data['data']['expires'] = Time.parse( data['data']['expires'] )
+            end
+
+            data['data'] = data['data'].my_symbolize_keys(false)
 
             super data
         end
@@ -360,8 +293,8 @@ class Cookie < Base
         # @see .from_document
         # @see .from_headers
         def from_response( response )
-            ( from_document( response.url, response.body ) |
-                from_headers( response.url, response.headers ) )
+            from_document( response.url, response.body ) |
+                from_headers( response.url, response.headers )
         end
 
         # Extracts cookies from a document based on `Set-Cookie` `http-equiv`
@@ -375,21 +308,18 @@ class Cookie < Base
         #
         # @see .parse_set_cookie
         def from_document( url, document )
-            # optimizations in case there are no cookies in the doc,
-            # avoid parsing unless absolutely necessary!
             if !document.is_a?( Nokogiri::HTML::Document )
-                # get get the head in order to check if it has an http-equiv for set-cookie
-                head = document.to_s.match( /<head(.*)<\/head>/imx )
+                document = document.to_s
 
-                # if it does feed the head to the parser in order to extract the cookies
-                return [] if !head || !head.to_s.downcase.include?( 'set-cookie' )
+                return [] if !(document =~ /set-cookie/i )
 
-                document = Nokogiri::HTML( head.to_s )
+                document = Nokogiri::HTML( document )
             end
 
             Arachni::Utilities.exception_jail {
-                document.search( "//meta[@http-equiv]" ).map do |elem|
+                document.search( '//meta[@http-equiv]' ).map do |elem|
                     next if elem['http-equiv'].downcase != 'set-cookie'
+
                     from_set_cookie( url, elem['content'] )
                 end.flatten.compact
             } rescue []
@@ -431,9 +361,14 @@ class Cookie < Base
 
                 cookie_hash['path'] ||= '/'
                 cookie_hash['name']  = decode( cookie.name )
-                cookie_hash['value'] = decode( cookie.value )
 
-                new( { url: url }.merge( cookie_hash.my_symbolize_keys ) )
+                if too_big?( cookie.value )
+                    cookie_hash['value'] = ''
+                else
+                    cookie_hash['value'] = decode( cookie.value )
+                end
+
+                new( { url: url, source: str }.merge( cookie_hash.my_symbolize_keys ) )
             end.flatten.compact
         end
         alias :parse_set_cookie :from_set_cookie
@@ -449,10 +384,27 @@ class Cookie < Base
         # @return   [Array<Cookie>]
         def from_string( url, string )
             return [] if string.empty?
+
             string.split( ';' ).map do |cookie_pair|
+                cookie_pair.strip!
+
                 k, v = *cookie_pair.split( '=', 2 )
-                new( url: url, inputs: { decode( k.strip ) => decode( v.strip ) } )
+
+                v = '' if too_big?( v )
+
+                new(
+                    url:    url,
+                    source: cookie_pair,
+                    inputs: { decode( k ) => value_to_v0( v ) }
+                )
             end.flatten.compact
+        end
+
+        def value_to_v0( value )
+            return '' if !value
+
+            value.start_with?( '"' ) && value.end_with?( '"' ) ?
+                value[1...-1] : decode( value )
         end
 
         # Encodes a {String}'s reserved characters in order to prepare it for
@@ -460,16 +412,35 @@ class Cookie < Base
         #
         # @example
         #    p Cookie.encode "+;%=\0 "
-        #    #=> "%2B%3B%25%3D%00+"
+        #    #=> "%2B%3B%25=%00+"
         #
+        #    p Cookie.encode "+;%=\0 ", true
+        #    #=> "%2B%3B%25%3D%00+"
         # @param    [String]    str
         #
         # @return   [String]
-        def encode( str, type = :value )
-            reserved = "+;%\0\'\"&"
-            reserved << '=' if type == :name
+        def encode( str, name = false )
+            str = str.to_s
 
-            URI.encode( str.to_s, reserved ).recode.gsub( ' ', '+' )
+            return str if !(name ? ENCODE_CHARACTERS_IN_NAME : ENCODE_CHARACTERS).
+                find { |c| str.include? c }
+
+            # Instead of just encoding everything we do this selectively because:
+            #
+            #  * Some webapps don't actually decode some cookies, they just get
+            #    the raw value, so if we encode something may break.
+            #  * We need to encode spaces as '+' because of the above.
+            #    Since we decode values, any un-encoded '+' will be converted
+            #    to spaces, and in order to send back a value that the server
+            #    expects we use '+' for spaces.
+
+            s = ::URI.encode(
+                str,
+                name ? ENCODE_CHARACTERS_IN_NAME_LIST :
+                    ENCODE_CHARACTERS_LIST
+            )
+            s.gsub!( '%20', '+' )
+            s
         end
 
         # Decodes a {String} encoded for the `Cookie` header field.
@@ -482,7 +453,7 @@ class Cookie < Base
         #
         # @return   [String]
         def decode( str )
-            URI.decode( str.to_s.recode.gsub( '+', ' ' ) )
+            Form.decode str
         end
 
         def keep_for_set_cookie

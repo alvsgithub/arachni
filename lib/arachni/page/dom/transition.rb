@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -270,13 +270,13 @@ class Transition
 
                         when 'element'
                             if value.is_a? String
-                                value.to_sym
+                                data['event'].to_s == 'request' ? value : value.to_sym
                             else
                                 Browser::ElementLocator.from_rpc_data( value )
                             end
 
                         when 'options'
-                            value.my_symbolize_keys
+                            value.my_symbolize_keys(false)
 
                         else
                             value

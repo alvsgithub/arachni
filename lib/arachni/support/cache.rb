@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -8,6 +8,7 @@
 
 lib = Arachni::Options.paths.support + 'cache/'
 require lib + 'base'
+require lib + 'least_recently_pushed'
 require lib + 'least_recently_used'
 require lib + 'random_replacement'
 require lib + 'least_cost_replacement'

@@ -11,7 +11,15 @@ describe name_from_filename do
         1
     end
 
-    easy_test( false ) do
-        issues.first.page.url.should include 'vulnerable'
+    it 'logs hosts missing the header' do
+        options.url = "#{url}/vulnerable"
+        run
+        expect(issues).to be_any
+    end
+
+    it 'logs hosts missing the header' do
+        options.url = "#{url}/safe"
+        run
+        expect(issues).to be_empty
     end
 end

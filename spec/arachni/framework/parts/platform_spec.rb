@@ -5,7 +5,7 @@ describe Arachni::Framework::Parts::Platform do
 
     describe '#list_platforms' do
         it 'returns information about all valid platforms' do
-            subject.list_platforms.should == {
+            expect(subject.list_platforms).to eq({
                 'Operating systems' => {
                     unix:    'Generic Unix family',
                     linux:   'Linux',
@@ -36,26 +36,34 @@ describe Arachni::Framework::Parts::Platform do
                     mongodb:    'MongoDB'
                 },
                 'Web servers' => {
-                    apache: 'Apache',
-                    iis:    'IIS',
-                    jetty:  'Jetty',
-                    nginx:  'Nginx',
-                    tomcat: 'TomCat'
+                    apache:   'Apache',
+                    iis:      'IIS',
+                    jetty:    'Jetty',
+                    nginx:    'Nginx',
+                    tomcat:   'TomCat',
+                    gunicorn: 'Gunicorn',
                 },
                 'Programming languages' => {
                     asp:    'ASP',
                     aspx:   'ASP.NET',
-                    jsp:    'JSP',
+                    java:   'Java',
                     perl:   'Perl',
                     php:    'PHP',
                     python: 'Python',
                     ruby:   'Ruby'
                 },
                 'Frameworks' => {
-                    rack: 'Rack'
+                    rack:     'Rack',
+                    django:   'Django',
+                    rails:    'Ruby on Rails',
+                    aspx_mvc: 'ASP.NET MVC',
+                    jsf:      'JavaServer Faces',
+                    cherrypy: 'CherryPy',
+                    cakephp:  'CakePHP',
+                    symfony:  'Symfony',
+                    nette:    'Nette'
                 }
-            }
-
+            })
         end
     end
 

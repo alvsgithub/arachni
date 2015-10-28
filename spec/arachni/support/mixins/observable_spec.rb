@@ -23,11 +23,11 @@ describe Arachni::Support::Mixins::Observable do
             subject.my_event { called = true }
             subject.notify :my_event
 
-            called.should be_true
+            expect(called).to be_truthy
         end
 
         it 'returns self' do
-            subject.my_event { }.should == subject
+            expect(subject.my_event { }).to eq(subject)
         end
 
         context 'when no block is given' do
@@ -46,7 +46,7 @@ describe Arachni::Support::Mixins::Observable do
                 end
                 subject.notify :my_other_event, sent_args
 
-                received_args.should == sent_args
+                expect(received_args).to eq(sent_args)
             end
         end
 
@@ -57,10 +57,24 @@ describe Arachni::Support::Mixins::Observable do
         end
     end
 
-    describe '#call_<event>' do
+    describe '#notify' do
         it 'returns nil' do
             subject.my_event { }
-            subject.notify( :my_event ).should be_nil
+            expect(subject.notify( :my_event )).to be_nil
+        end
+
+        context 'when a callback raises an exception' do
+            it 'does not affect other callbacks' do
+                called = []
+
+                subject.my_event { called << 1 }
+                subject.my_event { called << 2; raise }
+                subject.my_event { called << 3 }
+
+                subject.notify( :my_event )
+
+                expect(called).to eq([1, 2, 3])
+            end
         end
     end
 
@@ -73,7 +87,7 @@ describe Arachni::Support::Mixins::Observable do
 
             subject.notify :my_event
 
-            called.should be_false
+            expect(called).to be_falsey
 
         end
     end

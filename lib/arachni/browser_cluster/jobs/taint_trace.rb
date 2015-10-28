@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -42,9 +42,11 @@ class TaintTrace < ResourceExploration
     end
 
     def to_s
-        "#<#{self.class}:#{object_id} @resource=#{@resource} " +
-            "@taint=#{@taint.inspect} @injector=#{@injector.inspect}>"
+        "#<#{self.class}:#{object_id} @resource=#{@resource} " <<
+            "@taint=#{@taint.inspect} @injector=#{@injector.inspect} " <<
+            "time=#{@time} timed_out=#{timed_out?}>"
     end
+    alias :inspect :to_s
 
 end
 

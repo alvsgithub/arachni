@@ -1,15 +1,14 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
     web site for more information on licensing and terms of use.
 =end
 
-module Arachni
-
 require 'nokogiri'
-require Options.paths.lib + 'nokogiri/xml/node'
+
+module Arachni
 
 module Element
 
@@ -25,9 +24,13 @@ module Capabilities
     end
 end
 
-# load and include all available capabilities
-lib = File.dirname( __FILE__ ) + '/capabilities/*.rb'
-Dir.glob( lib ).each { |f| require f }
+file = File.dirname( __FILE__ )
+# Need to be loaded in order.
+%w(inputtable submittable mutable auditable analyzable).each do |name|
+    require_relative "#{file}/capabilities/#{name}.rb"
+end
+# Load the rest automatically.
+Dir.glob( "#{file}/capabilities/*.rb" ).each { |f| require f }
 
 # Base class for all element types.
 #
@@ -38,6 +41,19 @@ class Base
     extend Utilities
 
     include Capabilities::WithScope
+
+    # Maximum element size in bytes.
+    # Anything larger than this should be exempt from parse and storage or have
+    # its value ignored.
+    #
+    # During the audit, thousands of copies will be generated and the same
+    # amount of HTP requests will be stored in the HTTP::Client queue.
+    # Thus, elements with inputs of excessive size will lead to excessive RAM
+    # consumption.
+    #
+    # This will almost never be necessary, but there have been cases of
+    # buggy `_VIEWSTATE` inputs that grow infinitely.
+    MAX_SIZE = 10_000
 
     # @return     [Page]
     #   Page this element belongs to.
@@ -125,7 +141,7 @@ class Base
     # @return   [Symbol]
     #   Element type.
     def self.type
-        name.split( ':' ).last.downcase.to_sym
+        @type ||= name.split( ':' ).last.downcase.to_sym
     end
 
     def dup
@@ -153,6 +169,14 @@ class Base
         data.delete 'audit_options'
         data.delete 'scope'
         data['class'] = self.class.to_s
+
+        data['initialization_options'] = initialization_options
+
+        if data['initialization_options'].is_a? Hash
+            data['initialization_options'] =
+                data['initialization_options'].my_stringify_keys(false)
+        end
+
         data
     end
 
@@ -163,6 +187,7 @@ class Base
         data.each do |name, value|
             value = case name
                         when 'dom'
+                            next if !value
                             self::DOM.from_rpc_data( value )
 
                         when 'initialization_options'
@@ -181,6 +206,10 @@ class Base
 
         instance.instance_variable_set( :@audit_options, {} )
         instance
+    end
+
+    def self.too_big?( element )
+        (element.is_a?( Numeric ) ? element : element.to_s.size) >= MAX_SIZE
     end
 
 end

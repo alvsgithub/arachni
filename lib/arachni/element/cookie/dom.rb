@@ -1,10 +1,12 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
     web site for more information on licensing and terms of use.
 =end
+
+require_relative '../dom'
 
 module Arachni::Element
 class Cookie
@@ -12,8 +14,11 @@ class Cookie
 # Provides access to DOM operations for {Cookie cookies}.
 #
 # @author Tasos "Zapotek" Laskos <tasos.laskos@arachni-scanner.com>
-class DOM < Base
-    include Capabilities::Auditable::DOM
+class DOM < DOM
+    include Arachni::Element::DOM::Capabilities::Mutable
+    include Arachni::Element::DOM::Capabilities::Inputtable
+    include Arachni::Element::DOM::Capabilities::Submittable
+    include Arachni::Element::DOM::Capabilities::Auditable
 
     def initialize( options )
         super
@@ -24,8 +29,12 @@ class DOM < Base
 
     # Submits the cookie using the configured {#inputs}.
     def trigger
-        browser.goto action, take_snapshot: false, cookies: self.inputs,
-                     update_transitions: false
+        [ browser.goto(
+            action,
+            take_snapshot:      false,
+            cookies:            self.inputs,
+            update_transitions: false
+        ) ]
     end
 
     def name
@@ -40,14 +49,6 @@ class DOM < Base
         p = parent.dup
         p.inputs = inputs
         p.to_set_cookie
-    end
-
-    def encode( *args )
-        Cookie.encode( *args )
-    end
-
-    def decode( *args )
-        Cookie.decode( *args )
     end
 
     def type

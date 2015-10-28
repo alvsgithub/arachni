@@ -1,10 +1,12 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
     web site for more information on licensing and terms of use.
 =end
+
+require_relative '../mutable'
 
 module Arachni
 module Element::Capabilities
@@ -28,8 +30,7 @@ module Differential
     end
 
     DIFFERENTIAL_OPTIONS =  {
-        # Append our seeds to the default values.
-        format:         [Mutable::Format::STRAIGHT],
+        format:         [Arachni::Element::Capabilities::Mutable::Format::STRAIGHT],
 
         # Amount of refinement operations to remove context-irrelevant dynamic
         # content -- like banners etc.
@@ -37,7 +38,9 @@ module Differential
 
         # Override global fuzzing settings and only use the default method of the
         # element under audit.
-        respect_method: true,
+        with_both_http_methods: false,
+        parameter_names:        false,
+        with_extra_parameter:   false,
 
         # Disable {Arachni::Options#audit_cookies_extensively}, there's little
         # to be gained in this case and just causes interference.
@@ -55,6 +58,8 @@ module Differential
         # Default value for a forceful 'false' response.
         false:          '-1'
     }
+
+    attr_accessor :differential_analysis_options
 
     # Performs differential analysis and logs an issue should there be one.
     #
@@ -101,6 +106,12 @@ module Differential
     def differential_analysis( opts = {} )
         return if self.inputs.empty?
 
+        with_missing_values = Set.new( self.inputs.select { |k, v| v.to_s.empty? }.keys )
+        if self.inputs.size == with_missing_values.size
+            print_debug 'Differential analysis: Inputs are missing default values.'
+            return false
+        end
+
         return false if audited? audit_id
         audited audit_id
 
@@ -110,7 +121,11 @@ module Differential
             return false
         end
 
+        @differential_analysis_options = opts.dup
         opts = self.class::MUTATION_OPTIONS.merge( DIFFERENTIAL_OPTIONS.merge( opts ) )
+        opts[:skip_like] = proc do |mutation|
+            with_missing_values.include? mutation.affected_input_name
+        end
 
         mutations_size = 0
         each_mutation( opts[:false], opts ) { mutations_size += 1 }
@@ -153,6 +168,18 @@ module Differential
         true
     end
 
+    def dup
+        e = super
+        return e if !@differential_analysis_options
+
+        e.differential_analysis_options = @differential_analysis_options.dup
+        e
+    end
+
+    def to_rpc_data
+        super.tap { |data| data.delete 'differential_analysis_options' }
+    end
+
     private
 
     # Performs requests using the 'false' control seed and generates/stores
@@ -180,13 +207,15 @@ module Differential
                     @data_gathering[:controls][altered_hash] = true
                 end
 
+                body = res.body.gsub( elem.seed, '' )
+
                 # Create a signature from the response body and refine it with
                 # subsequent ones to remove noise (like context-irrelevant dynamic
                 # content such as banners etc.).
                 signatures[:controls][altered_hash] =
                     signatures[:controls][altered_hash] ?
-                        signatures[:controls][altered_hash].refine!(res.body) :
-                        Support::Signature.new(res.body)
+                        signatures[:controls][altered_hash].refine!(body) :
+                        Support::Signature.new(body)
 
                 increase_received_responses( opts, signatures )
             end
@@ -248,13 +277,15 @@ module Differential
 
                     signatures[pair_hash][altered_hash][:injected_string] ||= expr
 
+                    body = res.body.gsub( elem.seed, '' )
+
                     # Create a signature from the response body and refine it with
                     # subsequent ones to remove noise (like context-irrelevant dynamic
                     # content such as banners etc.).
                     signatures[pair_hash][altered_hash][bool] =
                         signatures[pair_hash][altered_hash][bool] ?
-                            signatures[pair_hash][altered_hash][bool].refine!(res.body) :
-                            Support::Signature.new(res.body)
+                            signatures[pair_hash][altered_hash][bool].refine!(body) :
+                            Support::Signature.new(body)
 
                     signature_sieve( altered_hash, signatures, pair_hash )
 
@@ -310,13 +341,15 @@ module Differential
                         " action '#{elem.action}'."
                 end
 
+                body = res.body.gsub( elem.seed, '' )
+
                 # Create a signature from the response body and refine it with
                 # subsequent ones to remove noise (like context-irrelevant dynamic
                 # content such as banners etc.).
                 signatures[:controls_verification][altered_hash] =
                     signatures[:controls_verification][altered_hash] ?
-                        signatures[:controls_verification][altered_hash].refine!(res.body) :
-                        Support::Signature.new(res.body)
+                        signatures[:controls_verification][altered_hash].refine!(body) :
+                        Support::Signature.new(body)
 
                 received_responses += 1
                 next if received_responses != @data_gathering[:mutations_size]
@@ -334,7 +367,7 @@ module Differential
         controls_verification = signatures.delete( :controls_verification )
         corrupted             = signatures.delete( :corrupted )
 
-        signatures.each do |_, data|
+        signatures.each do |pair_hash, data|
             data.each do |input, result|
                 next if !result[:response] || result[:corrupted] || corrupted[input]
 
@@ -358,11 +391,29 @@ module Differential
 
                 # Check to see if the `true` response we're analyzing
                 # is a custom 404 page.
-                http.custom_404?( result[:response] ) do |is_custom_404|
+                http.dynamic_404_handler._404?( result[:response] ) do |is_custom_404|
                     # If this is a custom 404 page bail out.
                     next if is_custom_404
-                    @auditor.log vector: result[:mutation],
-                                 response: result[:response]
+
+                    options = result[:mutation].differential_analysis_options
+                    pair    = options[:pairs].find { |pair| pair.hash == pair_hash }
+
+                    issue_data = {
+                        vector:   result[:mutation],
+                        response: result[:response]
+                    }
+
+                    if pair
+                        issue_data[:remarks] = {
+                            :differential_analysis => [
+                                "True expression: #{pair.keys.first}",
+                                "False expression: #{pair.values.first}",
+                                "Control false expression: #{options[:false]}"
+                            ]
+                        }
+                    end
+
+                    @auditor.log( issue_data )
                 end
             end
         end

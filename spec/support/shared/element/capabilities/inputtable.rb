@@ -5,6 +5,8 @@ shared_examples_for 'inputtable' do |options = {}|
     end
 
     let(:inputs) do
+        return opts[:inputs] if opts[:inputs]
+
         if opts[:single_input]
             { 'input1' => 'value1' }
         else
@@ -16,6 +18,8 @@ shared_examples_for 'inputtable' do |options = {}|
     end
 
     let(:sym_key_inputs) { inputs.my_symbolize_keys }
+
+    let(:valid_key) { keys.first.to_s }
 
     let(:keys) do
         subject.inputs.keys
@@ -42,7 +46,7 @@ shared_examples_for 'inputtable' do |options = {}|
     end
 
     it "supports #{Arachni::RPC::Serializer}" do
-        subject.should == Arachni::RPC::Serializer.deep_clone( subject )
+        expect(subject).to eq(Arachni::RPC::Serializer.deep_clone( subject ))
     end
 
     describe '#to_rpc_data' do
@@ -50,7 +54,7 @@ shared_examples_for 'inputtable' do |options = {}|
 
         %w(inputs default_inputs).each do |attribute|
             it "includes '#{attribute}'" do
-                data[attribute].should == subject.send( attribute )
+                expect(data[attribute]).to eq(subject.send( attribute ))
             end
         end
     end
@@ -61,7 +65,7 @@ shared_examples_for 'inputtable' do |options = {}|
 
         %w(inputs default_inputs).each do |attribute|
             it "restores '#{attribute}'" do
-                restored.send( attribute ).should == subject.send( attribute )
+                expect(restored.send( attribute )).to eq(subject.send( attribute ))
             end
         end
     end
@@ -73,27 +77,12 @@ shared_examples_for 'inputtable' do |options = {}|
             k, v = orig.inputs.keys.first, 'value'
 
             subject.update( k => v )
-            subject.affected_input_name = k
-            subject.affected_input_value = v
-            subject.seed = v
 
-            subject.inputs.should_not == orig.inputs
-            subject.affected_input_name.should_not == orig.affected_input_name
-            subject.affected_input_value.should_not == orig.affected_input_value
-            subject.seed.should_not == orig.seed
+            expect(subject.inputs).not_to eq(orig.inputs)
 
             subject.reset
 
-            subject.inputs.should == orig.inputs
-
-            subject.affected_input_name.should == orig.affected_input_name
-            subject.affected_input_name.should be_nil
-
-            subject.affected_input_value.should == orig.affected_input_value
-            subject.affected_input_value.should be_nil
-
-            subject.seed.should == orig.seed
-            subject.seed.should be_nil
+            expect(subject.inputs).to eq(orig.inputs)
         end
     end
 
@@ -103,20 +92,20 @@ shared_examples_for 'inputtable' do |options = {}|
                 context 'when it has the given inputs' do
                     it 'returns true' do
                         keys.each do |k|
-                            subject.has_inputs?( k.to_s.to_sym ).should be_true
-                            subject.has_inputs?( k.to_s ).should be_true
+                            expect(subject.has_inputs?( k.to_s.to_sym )).to be_truthy
+                            expect(subject.has_inputs?( k.to_s )).to be_truthy
                         end
 
-                        subject.has_inputs?( *sym_keys ).should be_true
-                        subject.has_inputs?( *keys ).should be_true
+                        expect(subject.has_inputs?( *sym_keys )).to be_truthy
+                        expect(subject.has_inputs?( *keys )).to be_truthy
                     end
                 end
                 context 'when it does not have the given inputs' do
                     it 'returns false' do
-                        subject.has_inputs?( *non_existent_sym_keys ).should be_false
-                        subject.has_inputs?( *non_existent_keys ).should be_false
+                        expect(subject.has_inputs?( *non_existent_sym_keys )).to be_falsey
+                        expect(subject.has_inputs?( *non_existent_keys )).to be_falsey
 
-                        subject.has_inputs?( non_existent_keys.first ).should be_false
+                        expect(subject.has_inputs?( non_existent_keys.first )).to be_falsey
                     end
                 end
             end
@@ -124,14 +113,14 @@ shared_examples_for 'inputtable' do |options = {}|
             context Array do
                 context 'when it has the given inputs' do
                     it 'returns true' do
-                        subject.has_inputs?( sym_keys ).should be_true
-                        subject.has_inputs?( keys ).should be_true
+                        expect(subject.has_inputs?( sym_keys )).to be_truthy
+                        expect(subject.has_inputs?( keys )).to be_truthy
                     end
                 end
                 context 'when it does not have the given inputs' do
                     it 'returns false' do
-                        subject.has_inputs?( non_existent_sym_keys ).should be_false
-                        subject.has_inputs?( non_existent_keys ).should be_false
+                        expect(subject.has_inputs?( non_existent_sym_keys )).to be_falsey
+                        expect(subject.has_inputs?( non_existent_keys )).to be_falsey
                     end
                 end
             end
@@ -139,15 +128,15 @@ shared_examples_for 'inputtable' do |options = {}|
             context Hash do
                 context 'when it has the given inputs (names and values)' do
                     it 'returns true' do
-                        subject.has_inputs?( subject.inputs ).should be_true
-                        subject.has_inputs?( subject.inputs.my_symbolize_keys ).should be_true
+                        expect(subject.has_inputs?( subject.inputs )).to be_truthy
+                        expect(subject.has_inputs?( subject.inputs.my_symbolize_keys )).to be_truthy
                     end
                 end
                 context 'when it does not have the given inputs' do
                     it 'returns false' do
-                        subject.has_inputs?(
+                        expect(subject.has_inputs?(
                             inputs.keys.first => "#{inputs.values.first} 1"
-                        ).should be_false
+                        )).to be_falsey
                     end
                 end
             end
@@ -156,87 +145,94 @@ shared_examples_for 'inputtable' do |options = {}|
 
     describe '#inputs' do
         it 'is frozen' do
-            subject.inputs.should be_frozen
+            expect(subject.inputs).to be_frozen
         end
     end
 
     describe '#inputtable_id' do
+        before do
+            allow_any_instance_of(described_class).to receive(:valid_input_name?) { true }
+            allow_any_instance_of(described_class).to receive(:valid_input_value?) { true }
+        end
+
         it 'takes into account input names' do
             e = subject.dup
-            e.stub(:inputs) { { 1 => 2 } }
+            e.inputs = { 1 => 2 }
 
             c = subject.dup
-            c.stub(:inputs) { { 1 => 2 } }
+            c.inputs = { 1 => 2 }
 
-            e.inputtable_id.should == c.inputtable_id
+            expect(e.inputtable_id).to eq(c.inputtable_id)
 
             e = subject.dup
-            e.stub(:inputs) { { 1 => 2 } }
+            e.inputs = { 1 => 2 }
 
             c = subject.dup
-            c.stub(:inputs) { { 2 => 2 } }
+            c.inputs = { 2 => 2 }
 
-            e.inputtable_id.should_not == c.inputtable_id
+            expect(e.inputtable_id).not_to eq(c.inputtable_id)
         end
 
         it 'takes into account input values' do
             e = subject.dup
-            e.stub(:inputs) { { 1 => 2 } }
+            e.inputs = { 1 => 2 }
 
             c = subject.dup
-            c.stub(:inputs) { { 1 => 2 } }
+            c.inputs = { 1 => 2 }
 
-            e.inputtable_id.should == c.inputtable_id
+            expect(e.inputtable_id).to eq(c.inputtable_id)
 
             e = subject.dup
-            e.stub(:inputs) { { 1 => 1 } }
+            e.inputs = { 1 => 1 }
 
             c = subject.dup
-            c.stub(:inputs) { { 1 => 2 } }
+            c.inputs = { 1 => 2 }
 
-            e.inputtable_id.should_not == c.inputtable_id
+            expect(e.inputtable_id).not_to eq(c.inputtable_id)
         end
 
-        it 'ignores input order' do
+        it 'ignores input order', if: !options[:single_input] do
             e = subject.dup
-            e.stub(:inputs) { { 1 => 2, 3 => 4 } }
+            e.inputs = { 1 => 2, 3 => 4 }
 
             c = subject.dup
-            c.stub(:inputs) { { 3 => 4, 1 => 2 } }
+            c.inputs = { 3 => 4, 1 => 2 }
 
-            e.inputtable_id.should == c.inputtable_id
+            expect(e.inputtable_id).to eq(c.inputtable_id)
         end
     end
 
     describe '#inputs=' do
         it 'assigns a hash of auditable inputs' do
             a = subject.dup
-            a.inputs = { 'input1' => 'val1' }
-            a.inputs.should == { 'input1' => 'val1' }
+            a.inputs = { valid_key => 'my val' }
+            expect(a.inputs).to eq({ valid_key => 'my val' })
         end
 
-        it 'converts all inputs to strings' do
-            subject.inputs = { input1: nil }
-            subject.inputs.should == { 'input1' => '' }
+        it 'converts all inputs to strings',
+           if: described_class != Arachni::Element::JSON do
+
+            subject.inputs = { valid_key.to_sym => nil }
+            expect(subject.inputs).to eq({ valid_key => '' })
         end
 
         context 'when the input name' do
             context 'contains invalid data' do
                 it "raises #{Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Name}" do
-                    subject.stub(:valid_input_data?) { |data| data != 'input1' }
+                    allow(subject).to receive(:valid_input_data?) { |data| data != valid_key }
 
                     expect do
-                        subject.inputs = { 'input1' => 'blah' }
+                        subject.inputs = { valid_key => 'blah' }
                     end.to raise_error Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Name
                 end
             end
 
             context 'is invalid' do
                 it "raises #{Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Name}" do
-                    subject.stub(:valid_input_name?) { false }
+                    allow(subject).to receive(:valid_input_name?) { false }
 
                     expect do
-                        subject.inputs = { 'input1' => 'blah' }
+                        subject.inputs = { valid_key => 'blah' }
                     end.to raise_error Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Name
                 end
             end
@@ -245,20 +241,20 @@ shared_examples_for 'inputtable' do |options = {}|
         context 'when the input value' do
             context 'contains invalid data' do
                 it "raises #{Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Value}" do
-                    subject.stub(:valid_input_data?) { |data| data != 'blah' }
+                    allow(subject).to receive(:valid_input_data?) { |data| data != 'blah' }
 
                     expect do
-                        subject.inputs = { 'input1' => 'blah' }
+                        subject.inputs = { valid_key => 'blah' }
                     end.to raise_error Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Value
                 end
             end
 
             context 'is invalid' do
                 it "raises #{Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Value}" do
-                    subject.stub(:valid_input_value?) { false }
+                    allow(subject).to receive(:valid_input_value?) { false }
 
                     expect do
-                        subject.inputs = { 'input1' => 'blah' }
+                        subject.inputs = { valid_key => 'blah' }
                     end.to raise_error Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Value
                 end
             end
@@ -267,21 +263,21 @@ shared_examples_for 'inputtable' do |options = {}|
 
     describe '#valid_input_name_data?' do
         it 'returns true' do
-            subject.valid_input_name_data?( 'input1' ).should be_true
+            expect(subject.valid_input_name_data?( valid_key )).to be_truthy
         end
 
         context 'when the input name' do
             context 'contains invalid data' do
                 it 'returns false' do
-                    subject.stub(:valid_input_data?) { false }
-                    subject.valid_input_name_data?( 'input1' ).should be_false
+                    allow(subject).to receive(:valid_input_data?) { false }
+                    expect(subject.valid_input_name_data?( valid_key )).to be_falsey
                 end
             end
 
             context 'is invalid' do
                 it 'returns false' do
-                    subject.stub(:valid_input_name?) { false }
-                    subject.valid_input_name_data?( 'input1' ).should be_false
+                    allow(subject).to receive(:valid_input_name?) { false }
+                    expect(subject.valid_input_name_data?( valid_key )).to be_falsey
                 end
             end
         end
@@ -289,21 +285,21 @@ shared_examples_for 'inputtable' do |options = {}|
 
     describe '#valid_input_value_data?' do
         it 'returns true' do
-            subject.valid_input_value_data?( 'blah' ).should be_true
+            expect(subject.valid_input_value_data?( 'blah' )).to be_truthy
         end
 
         context 'when the input value' do
             context 'contains invalid data' do
                 it 'returns false' do
-                    subject.stub(:valid_input_data?) { false }
-                    subject.valid_input_value_data?( 'blah' ).should be_false
+                    allow(subject).to receive(:valid_input_data?) { false }
+                    expect(subject.valid_input_value_data?( 'blah' )).to be_falsey
                 end
             end
 
             context 'is invalid' do
                 it 'returns false' do
-                    subject.stub(:valid_input_value?) { false }
-                    subject.valid_input_value_data?( 'blah' ).should be_false
+                    allow(subject).to receive(:valid_input_value?) { false }
+                    expect(subject.valid_input_value_data?( 'blah' )).to be_falsey
                 end
             end
         end
@@ -313,49 +309,40 @@ shared_examples_for 'inputtable' do |options = {}|
         it 'updates the auditable inputs using the given hash' do
             a = subject.dup
 
-            updates =   if opts[:single_input]
-                            { 'input1' => 'val1' }
-                        else
-                            { 'input1' => 'val1', 'input2' => 'val3' }
-                        end
+            updates = keys.inject({}) { |h, k| h.merge!( k => "#{k} val")}
 
             a.update( updates )
-            a.inputs.should == updates
-
-            if !opts[:single_input]
-                c = a.dup
-                c.update( input1: '1' ).update( input2: '2' )
-                c['input1'].should == '1'
-                c['input2'].should == '2'
-            end
+            expect(a.inputs).to eq(updates)
         end
 
-        it 'converts all inputs to strings' do
-            subject.inputs = { 'input1' => 'stuff' }
-            subject.update( { 'input1' => nil } )
-            subject.inputs.should == { 'input1' => '' }
+        it 'converts all inputs to strings',
+           if: described_class != Arachni::Element::JSON do
+
+            subject.inputs = { valid_key => 'stuff' }
+            subject.update( { valid_key => nil } )
+            expect(subject.inputs).to eq({ valid_key => '' })
         end
 
         it 'returns self' do
-            subject.update({}).should == subject
+            expect(subject.update({})).to eq(subject)
         end
 
         context 'when the input name is invalid' do
             it "raises #{Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Name}" do
-                subject.stub(:valid_input_name?) { false }
+                allow(subject).to receive(:valid_input_name?) { false }
 
                 expect do
-                    subject.update 'input1' => 'blah'
+                    subject.update valid_key => 'blah'
                 end.to raise_error Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Name
             end
         end
 
         context 'when the input value is invalid' do
             it "raises #{Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Value}" do
-                subject.stub(:valid_input_value?) { false }
+                allow(subject).to receive(:valid_input_value?) { false }
 
                 expect do
-                    subject.update 'input1' => 'blah'
+                    subject.update valid_key => 'blah'
                 end.to raise_error Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Value
             end
         end
@@ -363,59 +350,47 @@ shared_examples_for 'inputtable' do |options = {}|
 
     describe '#changes' do
         it 'returns the changes the inputs have sustained' do
-            if !opts[:single_input]
-                [
-                    { 'input1' => 'val1', 'input2' => 'val2' },
-                    { 'input2' => 'val3' },
-                    {}
-                ].each do |updates|
-                    d = subject.dup
-                    d.update( updates )
-                    d.changes.should == updates
-                end
-            else
-                [
-                    { 'input1' => 'val1' },
-                    { 'input1' => 'val2' },
-                    {}
-                ].each do |updates|
-                    d = subject.dup
-                    d.update( updates )
-                    d.changes.should == updates
-                end
+            [
+                { valid_key => 'val1' },
+                { valid_key => 'val2' },
+                {}
+            ].each do |updates|
+                d = subject.dup
+                d.update( updates )
+                expect(d.changes).to eq(updates)
             end
         end
     end
 
     describe '#[]' do
         it ' serves as a reader to the #auditable hash' do
-            subject['input1'].should == subject.inputs['input1']
+            expect(subject[valid_key]).to eq(subject.inputs[valid_key])
         end
     end
 
     describe '#[]=' do
         it 'serves as a writer to the #inputs hash' do
-            subject['input1'] = 'val1'
-            subject['input1'].should == 'val1'
-            subject['input1'].should == subject.inputs['input1']
+            subject[valid_key] = 'val1'
+            expect(subject[valid_key]).to eq('val1')
+            expect(subject[valid_key]).to eq(subject.inputs[valid_key])
         end
 
         context 'when the input name is invalid' do
             it "raises #{Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Name}" do
-                subject.stub(:valid_input_name?) { false }
+                allow(subject).to receive(:valid_input_name?) { false }
 
                 expect do
-                    subject['input1'] = 'blah'
+                    subject[valid_key] = 'blah'
                 end.to raise_error Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Name
             end
         end
 
         context 'when the input value is invalid' do
             it "raises #{Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Value}" do
-                subject.stub(:valid_input_value?) { false }
+                allow(subject).to receive(:valid_input_value?) { false }
 
                 expect do
-                    subject['input1'] = 'blah'
+                    subject[valid_key] = 'blah'
                 end.to raise_error Arachni::Element::Capabilities::Inputtable::Error::InvalidData::Value
             end
         end
@@ -424,32 +399,32 @@ shared_examples_for 'inputtable' do |options = {}|
     describe '#try_input' do
         context 'when the operation is successful' do
             it 'returns true' do
-                subject.try_input do
-                    subject.inputs = inputs
+                expect(subject.try_input do
+                    subject.inputs = subject.inputs
                     nil
-                end.should be_true
+                end).to be_truthy
             end
         end
 
         context 'when the operation fails' do
             context 'due to an invalid name' do
                 it 'returns false' do
-                    subject.stub(:valid_input_name?) { false }
+                    allow(subject).to receive(:valid_input_name?) { false }
 
-                    subject.try_input do
+                    expect(subject.try_input do
                         subject.inputs = inputs
                         true
-                    end.should be_false
+                    end).to be_falsey
                 end
             end
             context 'due to an invalid value' do
                 it 'returns false' do
-                    subject.stub(:valid_input_value?) { false }
+                    allow(subject).to receive(:valid_input_value?) { false }
 
-                    subject.try_input do
+                    expect(subject.try_input do
                         subject.inputs = inputs
                         true
-                    end.should be_false
+                    end).to be_falsey
                 end
             end
         end
@@ -457,7 +432,7 @@ shared_examples_for 'inputtable' do |options = {}|
 
     describe '#default_inputs' do
         it 'should be frozen' do
-            subject.default_inputs.should be_frozen
+            expect(subject.default_inputs).to be_frozen
         end
 
         context 'when #inputs' do
@@ -465,12 +440,12 @@ shared_examples_for 'inputtable' do |options = {}|
                 it 'returns original input name/vals' do
                     orig_auditable = subject.inputs.dup
                     subject.inputs = {}
-                    subject.default_inputs.should == orig_auditable
+                    expect(subject.default_inputs).to eq(orig_auditable)
                 end
             end
             context 'has not been modified' do
                 it 'returns #inputs' do
-                    subject.default_inputs.should == subject.inputs
+                    expect(subject.default_inputs).to eq(subject.inputs)
                 end
             end
         end
@@ -479,20 +454,20 @@ shared_examples_for 'inputtable' do |options = {}|
     describe '#dup' do
         it 'preserves #inputs' do
             dup = subject.dup
-            dup.inputs.should == subject.inputs
+            expect(dup.inputs).to eq(subject.inputs)
 
-            dup[:input1] = 'blah'
-            subject.inputs['input1'].should_not == 'blah'
+            dup[valid_key] = 'blah'
+            expect(subject.inputs[valid_key]).not_to eq('blah')
 
-            dup.dup[:input1].should == 'blah'
+            expect(dup.dup[valid_key]).to eq('blah')
         end
     end
 
     describe '#to_h' do
         it 'returns a hash representation of self' do
             hash = subject.to_h
-            hash[:inputs].should         == subject.inputs
-            hash[:default_inputs].should == subject.default_inputs
+            expect(hash[:inputs]).to         eq(subject.inputs)
+            expect(hash[:default_inputs]).to eq(subject.default_inputs)
         end
     end
 

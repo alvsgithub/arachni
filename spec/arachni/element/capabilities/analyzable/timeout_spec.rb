@@ -9,6 +9,8 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
 
     before :all do
         Arachni::Options.url = @url = web_server_url_for( :timeout )
+        Arachni::Options.audit.elements :links
+
         @framework = Arachni::Framework.new
     end
 
@@ -17,7 +19,7 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
         Arachni::HTTP::Client.on_complete do |response|
             next if response.url.include? 'ignore'
 
-            response.body.should be_empty
+            expect(response.body).to be_empty
         end
     end
 
@@ -41,6 +43,29 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
         }
     end
 
+    describe '#dup' do
+        context 'when #timing_attack_remark_data is' do
+            context 'not nil' do
+                it 'duplicates it' do
+                    h = { stuff: [1] }
+
+                    subject.timing_attack_remark_data = h
+
+                    dupped = subject.dup
+                    expect(dupped).to eq(dupped)
+                    expect(dupped.timing_attack_remark_data).to eq(h)
+                    expect(dupped.timing_attack_remark_data.object_id).not_to eq(h.object_id)
+                end
+            end
+        end
+    end
+
+    describe '#to_rpc_data' do
+        it "does not include 'timing_attack_remark_data'" do
+            expect(subject.to_rpc_data).not_to include 'timing_attack_remark_data'
+        end
+    end
+
     describe '#timeout_id' do
         let(:action) { "#{@url}/action" }
 
@@ -49,83 +74,83 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
             id = subject.timeout_id
 
             subject.auditor = '2'
-            subject.timeout_id.should_not == id
+            expect(subject.timeout_id).not_to eq(id)
 
             subject.auditor = 1
             id = subject.timeout_id
 
             subject.auditor = 2
-            subject.timeout_id.should == id
+            expect(subject.timeout_id).to eq(id)
         end
 
         it 'takes into account #action' do
             e = subject.dup
-            e.stub(:action) { action }
+            allow(e).to receive(:action) { action }
 
             c = subject.dup
-            c.stub(:action) { "#{action}2" }
+            allow(c).to receive(:action) { "#{action}2" }
 
-            e.timeout_id.should_not == c.timeout_id
+            expect(e.timeout_id).not_to eq(c.timeout_id)
         end
 
         it 'takes into account #type' do
             e = subject.dup
-            e.stub(:type) { :blah }
+            allow(e).to receive(:type) { :blah }
 
             c = subject.dup
-            c.stub(:type) { :blooh }
+            allow(c).to receive(:type) { :blooh }
 
-            e.timeout_id.should_not == c.timeout_id
+            expect(e.timeout_id).not_to eq(c.timeout_id)
         end
 
         it 'takes into account #inputs names' do
             e = subject.dup
-            e.stub(:inputs) { {input1: 'stuff' } }
+            allow(e).to receive(:inputs) { {input1: 'stuff' } }
 
             c = subject.dup
-            c.stub(:inputs) { {input1: 'stuff2' } }
-            e.timeout_id.should == c.timeout_id
+            allow(c).to receive(:inputs) { {input1: 'stuff2' } }
+            expect(e.timeout_id).to eq(c.timeout_id)
 
             e = subject.dup
-            e.stub(:inputs) { {input1: 'stuff' } }
+            allow(e).to receive(:inputs) { {input1: 'stuff' } }
 
             c = subject.dup
-            c.stub(:inputs) { {input2: 'stuff' } }
+            allow(c).to receive(:inputs) { {input2: 'stuff' } }
 
-            e.timeout_id.should_not == c.timeout_id
+            expect(e.timeout_id).not_to eq(c.timeout_id)
         end
 
         it 'takes into account the #affected_input_value' do
             e = subject.dup
-            e.stub(:affected_input_value) { :blah }
+            allow(e).to receive(:affected_input_value) { :blah }
 
             c = subject.dup
-            c.stub(:affected_input_value) { :blooh }
+            allow(c).to receive(:affected_input_value) { :blooh }
 
-            e.timeout_id.should_not == c.timeout_id
+            expect(e.timeout_id).not_to eq(c.timeout_id)
         end
 
         it 'takes into account the #affected_input_name' do
             e = subject.dup
-            e.stub(:affected_input_name) { :blah }
+            allow(e).to receive(:affected_input_name) { :blah }
 
             c = subject.dup
-            c.stub(:affected_input_name) { :blooh }
+            allow(c).to receive(:affected_input_name) { :blooh }
 
-            e.timeout_id.should_not == c.timeout_id
+            expect(e.timeout_id).not_to eq(c.timeout_id)
         end
     end
 
     describe '#ensure_responsiveness' do
         context 'when the server is responsive' do
             it 'returns true' do
-                subject.ensure_responsiveness.should be_true
+                expect(subject.ensure_responsiveness).to be_truthy
             end
         end
         context 'when the server is not responsive' do
             it 'returns false' do
-                Arachni::Element::Link.new( url: @url + '/sleep' ).
-                    ensure_responsiveness( 1 ).should be_false
+                expect(Arachni::Element::Link.new( url: @url + '/sleep' ).
+                    ensure_responsiveness( 1 )).to be_falsey
             end
         end
     end
@@ -134,13 +159,13 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
         context 'when there are candidates' do
             it 'returns true' do
                 described_class.add_phase_2_candidate subject
-                described_class.has_candidates?.should be_true
+                expect(described_class.has_candidates?).to be_truthy
             end
         end
 
         context 'when there are no candidates' do
             it 'returns false' do
-                described_class.has_candidates?.should be_false
+                expect(described_class.has_candidates?).to be_falsey
             end
         end
     end
@@ -160,7 +185,7 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
             end
             run
 
-            response.body.should be_empty
+            expect(response.body).to be_empty
         end
 
         context 'when element submission results in a response with a response time' do
@@ -172,7 +197,7 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
                     end
                     run
 
-                    candidate.should be_true
+                    expect(candidate).to be_truthy
                 end
             end
 
@@ -191,7 +216,7 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
                     end
                     run
 
-                    candidate.should be_nil
+                    expect(candidate).to be_nil
                 end
             end
         end
@@ -228,14 +253,14 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
                 end
                 run
 
-                candidate.should be_true
+                expect(candidate).to be_truthy
 
                 verified = nil
                 candidate.timing_attack_verify( 1000 ) do
                     verified = true
                 end
 
-                verified.should be_nil
+                expect(verified).to be_nil
             end
         end
 
@@ -252,35 +277,65 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
                     response = r
                 end
 
-                response.should be_kind_of Arachni::HTTP::Response
+                expect(response).to be_kind_of Arachni::HTTP::Response
             end
         end
 
-        context 'when the request times out by default' do
-            subject do
-                e = Arachni::Element::Link.new(
-                    url:    @url + '/sleep',
-                    inputs: inputs
-                )
-                e.auditor = auditor
-                e
+        context 'when the request times out' do
+            context 'by default' do
+                subject do
+                    e = Arachni::Element::Link.new(
+                        url:    @url + '/sleep',
+                        inputs: inputs
+                    )
+                    e.auditor = auditor
+                    e
+                end
+
+                it 'does not call the given block' do
+                    candidate = nil
+                    subject.timing_attack_probe( '__TIME__', options ) do |element|
+                        candidate ||= element
+                    end
+                    run
+
+                    expect(candidate).to be_truthy
+
+                    verified = nil
+                    candidate.timing_attack_verify( 1000 ) do
+                        verified = true
+                    end
+
+                    expect(verified).to be_nil
+                end
             end
 
-            it 'does not call the given block' do
-                candidate = nil
-                subject.timing_attack_probe( '__TIME__', options ) do |element|
-                    candidate ||= element
-                end
-                run
-
-                candidate.should be_true
-
-                verified = nil
-                candidate.timing_attack_verify( 1000 ) do
-                    verified = true
+            context 'due to filtering' do
+                subject do
+                    e = Arachni::Element::Link.new(
+                        url:    @url + '/waf',
+                        inputs: inputs
+                    )
+                    e.auditor = auditor
+                    e
                 end
 
-                verified.should be_nil
+                it 'does not call the given block' do
+                    candidate = nil
+                    subject.timing_attack_probe( 'payload-__TIME__', options ) do |element|
+                        candidate ||= element
+                    end
+                    run
+
+                    expect(candidate).to be_truthy
+
+                    verified = nil
+                    candidate.timing_attack_verify( 1000 ) do
+                        verified = true
+                    end
+
+                    expect(verified).to be_nil
+                end
             end
         end
 
@@ -292,6 +347,19 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
     end
 
     describe '#timeout_analysis' do
+        it 'assigns assigns :timing_attack remarks' do
+            subject.timeout_analysis(
+                '__TIME__',
+                options.merge(
+                    timeout_divider: 1000,
+                    timeout:         2000
+                )
+            )
+            run
+
+            expect(issues.first.remarks[:timing_attack].size).to eq(3)
+        end
+
         context 'when the element action matches a skip rule' do
             subject do
                 Arachni::Element::Link.new(
@@ -301,10 +369,10 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
             end
 
             it 'returns false' do
-                subject.timeout_analysis(
+                expect(subject.timeout_analysis(
                     '__TIME__',
                     options.merge( timeout: 2000 )
-                ).should be_false
+                )).to be_falsey
             end
         end
 
@@ -325,8 +393,8 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
                 run
 
                 issue = issues.first
-                issue.platform_name.should == :windows
-                issue.platform_type.should == :os
+                expect(issue.platform_name).to eq(:windows)
+                expect(issue.platform_type).to eq(:os)
             end
         end
 
@@ -342,8 +410,8 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
                 c.timeout_analysis( '__TIME__', options.merge( timeout: 2000 ) )
                 run
 
-                issues.should be_any
-                issues.flatten.first.vector.seed.should == '8000'
+                expect(issues).to be_any
+                expect(issues.flatten.first.vector.seed).to eq('8000')
             end
         end
 
@@ -357,8 +425,8 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
                 )
                 run
 
-                issues.should be_any
-                issues.flatten.first.vector.seed.should == '8'
+                expect(issues).to be_any
+                expect(issues.flatten.first.vector.seed).to eq('8')
             end
         end
 
@@ -377,8 +445,8 @@ describe Arachni::Element::Capabilities::Analyzable::Timeout do
                 )
                 run
 
-                issues.should be_any
-                issues.flatten.first.response.time.to_i.should == 11
+                expect(issues).to be_any
+                expect(issues.flatten.first.response.time.to_i).to eq(11)
             end
         end
     end

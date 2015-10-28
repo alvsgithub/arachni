@@ -44,12 +44,12 @@ describe Arachni::HTTP::Request do
 
     it "supports #{Marshal} serialization" do
         subject = described_class.new( options )
-        subject.should == Marshal.load( Marshal.dump( subject ) )
+        expect(subject).to eq(Marshal.load( Marshal.dump( subject ) ))
     end
 
     it "supports #{Arachni::RPC::Serializer}" do
         subject = described_class.new( options )
-        subject.should == Arachni::RPC::Serializer.deep_clone( subject )
+        expect(subject).to eq(Arachni::RPC::Serializer.deep_clone( subject ))
     end
 
     describe '#to_rpc_data' do
@@ -58,7 +58,7 @@ describe Arachni::HTTP::Request do
         %w(url method parameters body headers_string effective_body timeout
             headers cookies username password).each do |attribute|
             it "includes '#{attribute}'" do
-                data[attribute].should == subject.send( attribute )
+                expect(data[attribute]).to eq(subject.send( attribute ))
             end
         end
     end
@@ -70,32 +70,55 @@ describe Arachni::HTTP::Request do
         %w(url method parameters body headers_string effective_body timeout
             headers cookies username password).each do |attribute|
             it "restores '#{attribute}'" do
-                restored.send( attribute ).should == subject.send( attribute )
+                expect(restored.send( attribute )).to eq(subject.send( attribute ))
             end
         end
 
         it "does not include 'scope" do
-            data.should_not include 'scope'
+            expect(data).not_to include 'scope'
         end
     end
 
     describe '#initialize' do
         it 'sets the instance attributes by the options' do
             r = described_class.new( options )
-            r.url.should          == Arachni::Utilities.normalize_url( url )
-            r.method.should       == options[:method]
-            r.parameters.should   == options[:parameters]
-            r.timeout.should      == options[:timeout]
-            r.headers.should      == options[:headers]
-            r.username.should     == options[:username]
-            r.password.should     == options[:password]
+            expect(r.url).to          eq(Arachni::Utilities.normalize_url( url ))
+            expect(r.method).to       eq(options[:method])
+            expect(r.parameters).to   eq(options[:parameters])
+            expect(r.timeout).to      eq(options[:timeout])
+            expect(r.headers).to      eq(options[:headers])
+            expect(r.username).to     eq(options[:username])
+            expect(r.password).to     eq(options[:password])
         end
 
         it 'uses the setter methods when configuring' do
             options = { url: url, method: 'gEt', parameters: { test: 'blah' } }
             r = described_class.new( options )
-            r.method.should == :get
-            r.parameters.should == { 'test' => 'blah' }
+            expect(r.method).to eq(:get)
+            expect(r.parameters).to eq({ 'test' => 'blah' })
+        end
+
+        describe :fingerprint do
+            context true do
+                it 'enables fingerprinting' do
+                    r = described_class.new( options.merge( fingerprint: true ) )
+                    expect(r.fingerprint?).to be_truthy
+                end
+            end
+
+            context false do
+                it 'disables fingerprinting' do
+                    r = described_class.new( options.merge( fingerprint: false ) )
+                    expect(r.fingerprint?).not_to be_truthy
+                end
+            end
+
+            context 'nil' do
+                it 'enables fingerprinting' do
+                    r = described_class.new( options.merge( fingerprint: nil ) )
+                    expect(r.fingerprint?).to be_truthy
+                end
+            end
         end
 
         context 'when url is not a String' do
@@ -106,7 +129,7 @@ describe Arachni::HTTP::Request do
                 rescue ArgumentError
                     raised = true
                 end
-                raised.should be_true
+                expect(raised).to be_truthy
             end
         end
     end
@@ -114,20 +137,20 @@ describe Arachni::HTTP::Request do
     describe '#to_s' do
         it 'returns the HTTP request as a string' do
             request = described_class.new( url: @url ).run.request
-            request.to_s.should == "#{request.headers_string}#{request.effective_body}"
+            expect(request.to_s).to eq("#{request.headers_string}#{request.effective_body}")
         end
     end
 
     describe '#asynchronous?' do
         context 'when the mode is :async' do
             it 'returns true' do
-                described_class.new( url: @url, mode: :async ).should be_asynchronous
+                expect(described_class.new( url: @url, mode: :async )).to be_asynchronous
             end
         end
 
         context 'when the mode is :sync' do
             it 'returns false' do
-                described_class.new( url: @url, mode: :sync ).should_not be_asynchronous
+                expect(described_class.new( url: @url, mode: :sync )).not_to be_asynchronous
             end
         end
     end
@@ -135,13 +158,13 @@ describe Arachni::HTTP::Request do
     describe '#blocking?' do
         context 'when the mode is :async' do
             it 'returns false' do
-                described_class.new( url: @url, mode: :async ).should_not be_blocking
+                expect(described_class.new( url: @url, mode: :async )).not_to be_blocking
             end
         end
 
         context 'when the mode is :sync' do
             it 'returns true' do
-                described_class.new( url: @url, mode: :sync ).should be_blocking
+                expect(described_class.new( url: @url, mode: :sync )).to be_blocking
             end
         end
     end
@@ -151,8 +174,8 @@ describe Arachni::HTTP::Request do
             request  = described_class.new( url: @url )
             response = request.run
 
-            response.should be_kind_of Arachni::HTTP::Response
-            response.request.should == request
+            expect(response).to be_kind_of Arachni::HTTP::Response
+            expect(response.request).to eq(request)
         end
 
         it 'calls #on_complete callbacks' do
@@ -164,23 +187,24 @@ describe Arachni::HTTP::Request do
             end
 
             response = request.run
-            response.should be_kind_of Arachni::HTTP::Response
-            response.request.should == request
+            expect(response).to be_kind_of Arachni::HTTP::Response
+            expect(response.request).to eq(request)
 
-            called.should == [response]
-            called.first.request.should == request
+            expect(called).to eq([response])
+            expect(called.first.request).to eq(request)
         end
 
         it "fills in #{Arachni::HTTP::Request}#headers_string" do
             host = "#{Arachni::URI(@url).host}:#{Arachni::URI(@url).port}"
-            described_class.new( url: @url ).run.request.headers_string.should ==
+            expect(described_class.new( url: @url ).run.request.headers_string).to eq(
                 "GET / HTTP/1.1\r\nHost: #{host}\r\nAccept-Encoding: gzip, " +
                     "deflate\r\nUser-Agent: Arachni/v#{Arachni::VERSION}\r\nAccept: text/html," +
                     "application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n\r\n"
+            )
         end
 
         it "fills in #{Arachni::HTTP::Request}#effective_body" do
-            described_class.new(
+            expect(described_class.new(
                 url: @url,
                 body: {
                     '1' => ' 2',
@@ -188,13 +212,13 @@ describe Arachni::HTTP::Request do
                 },
                 mode:   :sync,
                 method: :post
-            ).run.request.effective_body.should == "1=%202&%203=4"
+            ).run.request.effective_body).to eq("1=%202&%203=4")
         end
     end
 
     describe '#parameters' do
         it 'defaults to an empty Hash' do
-            described_class.new( url: url ).parameters.should == {}
+            expect(described_class.new( url: url ).parameters).to eq({})
         end
     end
 
@@ -215,7 +239,7 @@ describe Arachni::HTTP::Request do
 
             request = described_class.new( url: url )
             request.parameters = with_symbols
-            request.parameters.should == with_strings
+            expect(request.parameters).to eq(with_strings)
         end
     end
 
@@ -230,7 +254,7 @@ describe Arachni::HTTP::Request do
                 response = Arachni::HTTP::Response.new( url: url )
                 request.handle_response( response )
 
-                passed_response.should == response
+                expect(passed_response).to eq(response)
             end
 
             it 'can add multiple callbacks' do
@@ -245,9 +269,9 @@ describe Arachni::HTTP::Request do
                 response = Arachni::HTTP::Response.new( url: url )
                 request.handle_response( response )
 
-                passed_responses.size.should == 2
-                passed_responses.uniq.size.should == 1
-                passed_responses.uniq.first.should == response
+                expect(passed_responses.size).to eq(2)
+                expect(passed_responses.uniq.size).to eq(1)
+                expect(passed_responses.uniq.first).to eq(response)
             end
         end
     end
@@ -263,7 +287,7 @@ describe Arachni::HTTP::Request do
             request.clear_callbacks
             request.handle_response( response )
 
-            passed_response.should be_nil
+            expect(passed_response).to be_nil
         end
     end
 
@@ -278,7 +302,7 @@ describe Arachni::HTTP::Request do
             response = Arachni::HTTP::Response.new( url: url )
             request.handle_response( response )
 
-            passed_response.request.should == request
+            expect(passed_response.request).to eq(request)
         end
 
         it 'calls #on_complete callbacks' do
@@ -289,19 +313,19 @@ describe Arachni::HTTP::Request do
             request.on_complete { |res| passed_response = res }
             request.handle_response( response )
 
-            passed_response.should == response
+            expect(passed_response).to eq(response)
         end
     end
 
     describe '#parsed_url' do
         it 'returns the configured URL as a parsed object' do
-            described_class.new( url: url ).parsed_url.should == Arachni::URI( url )
+            expect(described_class.new( url: url ).parsed_url).to eq(Arachni::URI( url ))
         end
     end
 
     describe '#method' do
         it 'defaults to :get' do
-            described_class.new( url: url ).method.should == :get
+            expect(described_class.new( url: url ).method).to eq(:get)
         end
     end
 
@@ -309,7 +333,7 @@ describe Arachni::HTTP::Request do
         it 'normalizes the HTTP method to a downcase symbol' do
             request = described_class.new( url: url )
             request.method = 'pOsT'
-            request.method.should == :post
+            expect(request.method).to eq(:post)
         end
     end
 
@@ -317,7 +341,7 @@ describe Arachni::HTTP::Request do
         it 'normalizes and sets the given mode' do
             request = described_class.new( url: url )
             request.mode = 'aSyNC'
-            request.mode.should == :async
+            expect(request.mode).to eq(:async)
         end
 
         context 'when an invalid mode is given' do
@@ -341,22 +365,22 @@ describe Arachni::HTTP::Request do
                 }
             )
 
-            request.cookies.should == {
+            expect(request.cookies).to eq({
                 'cookie2' => 'updated_value',
                 'cookie3' => 'value3'
-            }
-            request.effective_cookies.should == {
+            })
+            expect(request.effective_cookies).to eq({
                 'my_cookie' => 'my_value',
                 'cookie2'   => 'updated_value',
                 'cookie3'   => 'value3'
-            }
+            })
         end
     end
 
     describe '#id' do
         it 'is incremented by the Arachni::HTTP::Client' do
             10.times do |i|
-                @http.get( @url ).id.should == i
+                expect(@http.get( @url ).id).to eq(i)
             end
         end
     end
@@ -364,18 +388,18 @@ describe Arachni::HTTP::Request do
     describe '#train' do
         it 'sets train? to return true' do
             req = described_class.new( url: url )
-            req.train?.should be_false
+            expect(req.train?).to be_falsey
             req.train
-            req.train?.should be_true
+            expect(req.train?).to be_truthy
         end
     end
 
     describe '#update_cookies' do
         it 'sets update_cookies? to return true' do
             req = described_class.new( url: url )
-            req.update_cookies?.should be_false
+            expect(req.update_cookies?).to be_falsey
             req.update_cookies
-            req.update_cookies?.should be_true
+            expect(req.update_cookies?).to be_truthy
         end
     end
 
@@ -384,14 +408,14 @@ describe Arachni::HTTP::Request do
         subject { request.to_typhoeus }
 
         it "converts #{described_class} to #{Typhoeus::Request}" do
-            subject.should be_kind_of Typhoeus::Request
+            expect(subject).to be_kind_of Typhoeus::Request
         end
 
         context 'when the request is blocking' do
             let(:request) { described_class.new( url: url, mode: :sync ) }
 
             it 'forbids socket reuse' do
-                subject.options[:forbid_reuse].should be_true
+                expect(subject.options[:forbid_reuse]).to be_truthy
             end
         end
 
@@ -399,7 +423,7 @@ describe Arachni::HTTP::Request do
             let(:request) { described_class.new( url: url, mode: :async ) }
 
             it 'reuses sockets' do
-                subject.options[:forbid_reuse].should be_false
+                expect(subject.options[:forbid_reuse]).to be_falsey
             end
         end
 
@@ -415,7 +439,7 @@ describe Arachni::HTTP::Request do
             end
 
             it 'encodes and puts them in the Cookie header' do
-                subject.options[:headers]['Cookie'].should == 'na+me=stu+ff;na+me2=stu+ff2'
+                expect(subject.options[:headers]['Cookie']).to eq('na+me=stu+ff;na+me2=stu+ff2')
             end
         end
 
@@ -428,7 +452,7 @@ describe Arachni::HTTP::Request do
             end
 
             it 'forwards it' do
-                subject.options[:proxy].should == 'http://stuff/'
+                expect(subject.options[:proxy]).to eq('http://stuff/')
             end
 
             context 'and #proxy_user_password' do
@@ -441,7 +465,7 @@ describe Arachni::HTTP::Request do
                 end
 
                 it 'forwards it' do
-                    subject.options[:proxyuserpwd].should == 'name:secret'
+                    expect(subject.options[:proxyuserpwd]).to eq('name:secret')
                 end
             end
 
@@ -455,7 +479,7 @@ describe Arachni::HTTP::Request do
                 end
 
                 it 'forwards it' do
-                    subject.options[:proxytype].should == :http
+                    expect(subject.options[:proxytype]).to eq(:http)
                 end
             end
         end
@@ -471,7 +495,7 @@ describe Arachni::HTTP::Request do
             end
 
             it 'forwards it' do
-                subject.options[:proxy].should == 'stuff:8080'
+                expect(subject.options[:proxy]).to eq('stuff:8080')
             end
 
             context "and #{Arachni::OptionGroups::HTTP}#proxy_username/#{Arachni::OptionGroups::HTTP}#proxy_password" do
@@ -479,14 +503,14 @@ describe Arachni::HTTP::Request do
                     Arachni::Options.http.proxy_username = 'name'
                     Arachni::Options.http.proxy_password = 'secret'
 
-                    subject.options[:proxyuserpwd].should == 'name:secret'
+                    expect(subject.options[:proxyuserpwd]).to eq('name:secret')
                 end
             end
 
             context "and #{Arachni::OptionGroups::HTTP}#proxy_type" do
                 it 'forwards it' do
                     Arachni::Options.http.proxy_type = 'http'
-                    subject.options[:proxytype].should == :http
+                    expect(subject.options[:proxytype]).to eq(:http)
                 end
             end
         end
@@ -501,11 +525,11 @@ describe Arachni::HTTP::Request do
             end
 
             it 'forwards it' do
-                subject.options[:userpwd].should == 'name:secret'
+                expect(subject.options[:userpwd]).to eq('name:secret')
             end
 
             it 'sets authentication type to :auto' do
-                subject.options[:httpauth].should == :auto
+                expect(subject.options[:httpauth]).to eq(:auto)
             end
         end
 
@@ -520,23 +544,151 @@ describe Arachni::HTTP::Request do
             end
 
             it 'forwards it' do
-                subject.options[:userpwd].should == 'name:secret'
+                expect(subject.options[:userpwd]).to eq('name:secret')
             end
 
             it 'sets authentication type to :auto' do
-                subject.options[:httpauth].should == :auto
+                expect(subject.options[:httpauth]).to eq(:auto)
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#response_max_size" do
+            before :each do
+                Arachni::Options.http.response_max_size = 10
+            end
+
+            context 'when #response_max_size' do
+                context 'has not been set' do
+                    it 'sets it as maxfilesize' do
+                        expect(subject.options[:maxfilesize]).to eq(10)
+                    end
+                end
+
+                context 'has been set' do
+                    let(:request) do
+                        described_class.new(
+                            url:               url,
+                            response_max_size: 1
+                        )
+                    end
+
+                    it 'overrides it' do
+                        expect(subject.options[:maxfilesize]).to eq(1)
+                    end
+
+                    context 'ands is < 0' do
+                        let(:request) do
+                            described_class.new(
+                                url:               url,
+                                response_max_size: -1
+                            )
+                        end
+
+                        it 'removes it' do
+                            expect(subject.options[:maxfilesize]).to be_nil
+                        end
+                    end
+                end
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_verify_peer" do
+            context 'true' do
+                it "sets #{Typhoeus::Request}#options[:ssl_verifypeer]" do
+                    Arachni::Options.http.ssl_verify_peer = true
+                    expect(subject.options[:ssl_verifypeer]).to eq(true)
+                end
+            end
+
+            context 'false' do
+                it "sets #{Typhoeus::Request}#options[:ssl_verifypeer]" do
+                    Arachni::Options.http.ssl_verify_peer = false
+                    expect(subject.options[:ssl_verifypeer]).to eq(false)
+                end
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_verify_host" do
+            context 'true' do
+                it "sets #{Typhoeus::Request}#options[:ssl_verifyhost] to 2" do
+                    allow(Arachni::Options.http).to receive(:ssl_verify_host){ true }
+                    expect(subject.options[:ssl_verifyhost]).to eq(2)
+                end
+            end
+
+            context 'false' do
+                it "sets #{Typhoeus::Request}#options[:ssl_verifyhost] to 2" do
+                    allow(Arachni::Options.http).to receive(:ssl_verify_host){ false }
+                    expect(subject.options[:ssl_verifyhost]).to eq(0)
+                end
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_certificate_filepath" do
+            it "sets #{Typhoeus::Request}#options[:sslcert]" do
+                allow(Arachni::Options.http).to receive(:ssl_certificate_filepath){ :stuff }
+                expect(subject.options[:sslcert]).to eq(:stuff)
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_certificate_type" do
+            it "sets #{Typhoeus::Request}#options[:sslcerttype]" do
+                allow(Arachni::Options.http).to receive(:ssl_certificate_type){ :stuff }
+                expect(subject.options[:sslcerttype]).to eq(:stuff)
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_key_filepath" do
+            it "sets #{Typhoeus::Request}#options[:sslkey]" do
+                allow(Arachni::Options.http).to receive(:ssl_key_filepath){ :stuff }
+                expect(subject.options[:sslkey]).to eq(:stuff)
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_key_type" do
+            it "sets #{Typhoeus::Request}#options[:sslkeytype]" do
+                allow(Arachni::Options.http).to receive(:ssl_key_type){ :stuff }
+                expect(subject.options[:sslkeytype]).to eq(:stuff)
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_key_password" do
+            it "sets #{Typhoeus::Request}#options[:sslkeypasswd]" do
+                allow(Arachni::Options.http).to receive(:ssl_key_password){ :stuff }
+                expect(subject.options[:sslkeypasswd]).to eq(:stuff)
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_ca_filepath" do
+            it "sets #{Typhoeus::Request}#options[:cainfo]" do
+                allow(Arachni::Options.http).to receive(:ssl_ca_filepath){ :stuff }
+                expect(subject.options[:cainfo]).to eq(:stuff)
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_ca_directory" do
+            it "sets #{Typhoeus::Request}#options[:capath]" do
+                allow(Arachni::Options.http).to receive(:ssl_ca_directory){ :stuff }
+                expect(subject.options[:capath]).to eq(:stuff)
+            end
+        end
+
+        context "#{Arachni::OptionGroups::HTTP}#ssl_version" do
+            it "sets #{Typhoeus::Request}#options[:sslversion]" do
+                allow(Arachni::Options.http).to receive(:ssl_version){ :stuff }
+                expect(subject.options[:sslversion]).to eq(:stuff)
             end
         end
     end
 
     describe '#to_h' do
         it 'returns a hash representation of self' do
-            described_class.new( options ).to_h.should == options.tap do |h|
+            expect(described_class.new( options ).to_h).to eq(options.tap do |h|
                 h.delete :timeout
                 h.delete :cookies
                 h.delete :username
                 h.delete :password
-            end
+            end)
         end
     end
 
@@ -546,32 +698,84 @@ describe Arachni::HTTP::Request do
                 context 'and there are #parameters' do
                     it 'returns #parameters' do
                         parameters = { 'stuff' => 'here' }
-                        described_class.new(
+                        expect(described_class.new(
                             url:        url,
                             parameters: parameters,
                             method:     :post
-                        ).body_parameters.should == parameters
+                        ).body_parameters).to eq(parameters)
                     end
                 end
 
                 context 'and there are no #parameters' do
                     it 'parses the #body' do
                         body = 'stuff=here&and_here=too'
-                        described_class.new(
+                        expect(described_class.new(
                             url:    url,
                             body:   body,
                             method: :post
-                        ).body_parameters.should == {
+                        ).body_parameters).to eq({
                             'stuff'    => 'here',
                             'and_here' => 'too'
-                        }
+                        })
+                    end
+
+                    context 'and content-type is multipart/form-data' do
+                        let(:body) do
+                            "--myboundary\r\nContent-Disposition: form-data; name=\"name1\"\r\n\r\nval1\r\n--myboundary\r\nContent-Disposition: form-data; name=\"name2\"\r\n\r\nval2\r\n--myboundary--\r\n"
+                        end
+
+                        it 'parses the #body' do
+                            expect(described_class.new(
+                                url:    url,
+                                body:   body,
+                                method: :post,
+                                headers: {
+                                    'Content-Type' => 'multipart/form-data; boundary=myboundary'
+                                }
+                            ).body_parameters).to eq({
+                                'name1'    => 'val1',
+                                'name2'    => 'val2'
+                            })
+                        end
+
+                        context 'but is missing a boundary' do
+                            it 'returns empty hash' do
+                                expect(described_class.new(
+                                    url:    url,
+                                    body:   body,
+                                    method: :post,
+                                    headers: {
+                                        'Content-Type' => 'multipart/form-data'
+                                    }
+                                ).body_parameters).to be_empty
+                            end
+                        end
+
+                        context 'and the body is incomplete' do
+                            let(:body) do
+                                "--myboundary\r\nContent-Disposition: form-data; name=\"name1\"\r\n\r\nval1\r\n--myboundary\r\nContent-Disposition: form-data; name=\"name2\"\r\n\r\nval2\r\n"
+                            end
+
+                            it 'returns partial data' do
+                                expect(described_class.new(
+                                    url:    url,
+                                    body:   body,
+                                    method: :post,
+                                    headers: {
+                                        'Content-Type' => 'multipart/form-data; boundary=myboundary'
+                                    }
+                                ).body_parameters).to eq({
+                                    'name1' => 'val1'
+                                })
+                            end
+                        end
                     end
                 end
             end
 
             context 'other' do
                 it 'returns an empty Hash' do
-                    described_class.new( url: url ).body_parameters.should == {}
+                    expect(described_class.new( url: url ).body_parameters).to eq({})
                 end
             end
         end
@@ -579,7 +783,7 @@ describe Arachni::HTTP::Request do
 
     describe '.parse_body' do
         it 'parses the request body into a Hash' do
-            described_class.parse_body( 'value%5C+%2B%3D%26%3B=value%5C+%2B%3D%26%3B&testID=53738&deliveryID=53618&testIDs=&deliveryIDs=&selectedRows=2&event=&section=&event%3Dmanage%26amp%3Bsection%3Dexam=Manage+selected+exam' ).should ==
+            expect(described_class.parse_body( 'value%5C+%2B%3D%26%3B=value%5C+%2B%3D%26%3B&testID=53738&deliveryID=53618&testIDs=&deliveryIDs=&selectedRows=2&event=&section=&event%3Dmanage%26amp%3Bsection%3Dexam=Manage+selected+exam' )).to eq(
                 {
                     "value\\ +=&;" => "value\\ +=&;",
                     "testID" => "53738",
@@ -591,11 +795,12 @@ describe Arachni::HTTP::Request do
                     "section" => "",
                     "event=manage&amp;section=exam" => "Manage selected exam"
                 }
+            )
         end
 
         context 'when the body is nil' do
             it 'returns an empty Hash' do
-                described_class.parse_body(nil).should == {}
+                expect(described_class.parse_body(nil)).to eq({})
             end
         end
     end

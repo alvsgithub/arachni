@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -98,6 +98,11 @@ class Hash
             recoded[k] = (v.respond_to?( :recode ) ? v.recode : v)
         end
         recoded
+    end
+
+    def recode!
+        each { |_, v| v.recode! if v.respond_to?( :recode! ) }
+        self
     end
 
     # @return   [Array<Symbol>]

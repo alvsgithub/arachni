@@ -15,7 +15,7 @@ describe Arachni::Reporter::Manager do
         it 'runs a reporter by name' do
             @reporters.run( 'foo', report )
 
-            File.exist?( 'foo' ).should be_true
+            expect(File.exist?( 'foo' )).to be_truthy
         end
 
         context 'when options are given' do
@@ -23,15 +23,41 @@ describe Arachni::Reporter::Manager do
                 options = { 'outfile' => 'stuff' }
                 reporter = @reporters.run( :foo, report, options )
 
-                reporter.options.should == options.my_symbolize_keys(false)
+                expect(reporter.options).to eq(options.my_symbolize_keys(false))
+            end
+        end
+
+        context 'when the raise argument is'do
+            context 'not given' do
+                context 'and the report raises an exception' do
+                    it 'does not raise it' do
+                        expect { @reporters.run( :error, report ) }.to_not raise_error
+                    end
+                end
+            end
+
+            context false do
+                context 'and the report raises an exception' do
+                    it 'does not raise it' do
+                        expect { @reporters.run( :error, report, {}, false ) }.to_not raise_error
+                    end
+                end
+            end
+
+            context true do
+                context 'and the report raises an exception' do
+                    it 'does not raise it' do
+                        expect { @reporters.run( :error, report, {}, true ) }.to raise_error
+                    end
+                end
             end
         end
     end
 
     describe '#reset' do
         it "delegates to #{described_class}.reset" do
-            described_class.stub(:reset) { :stuff }
-            @reporters.reset.should == :stuff
+            allow(described_class).to receive(:reset) { :stuff }
+            expect(@reporters.reset).to eq(:stuff)
         end
     end
 

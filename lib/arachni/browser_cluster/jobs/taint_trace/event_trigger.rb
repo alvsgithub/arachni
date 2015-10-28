@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -28,7 +28,7 @@ class EventTrigger < ResourceExploration::EventTrigger
     def to_s
         "#<#{self.class}:#{object_id} @resource=#{@resource} " +
             "@event=#{@event.inspect} @element=#{@element.inspect} " +
-            "@forwarder=#{@forwarder}>"
+            "@forwarder=#{@forwarder} time=#{@time} timed_out=#{timed_out?}>"
     end
 
 end

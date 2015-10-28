@@ -1,5 +1,5 @@
 =begin
-    Copyright 2010-2014 Tasos Laskos <tasos.laskos@arachni-scanner.com>
+    Copyright 2010-2015 Tasos Laskos <tasos.laskos@arachni-scanner.com>
 
     This file is part of the Arachni Framework project and is subject to
     redistribution and commercial restrictions. Please see the Arachni Framework
@@ -44,12 +44,29 @@ class Job
     # @see #forward_as
     attr_accessor :forwarder
 
+    # @return   [Integer]
+    #   Duration of the job, in seconds.
+    attr_accessor :time
+
     # @param    [Hash]  options
     def initialize( options = {} )
         @options      = options.dup
         @options[:id] = @id = options.delete(:id) || increment_id
 
         options.each { |k, v| options[k] = send( "#{k}=", v ) }
+    end
+
+    # @param    [Integer]   time
+    #   Amount of {#time} elapsed until time-out.
+    def timed_out!( time )
+        @timed_out = true
+        @time = time
+    end
+
+    # @return   [Bool]
+    #   `true` if timed-ot, `false` otherwise.
+    def timed_out?
+        !!@timed_out
     end
 
     # @note The following resources will be available at the time of execution:
@@ -101,6 +118,10 @@ class Job
     # @param    [Hash]  data
     #   Used to initialize the {Result}.
     def save_result( data )
+        # Results coming in after the job has already finished won't have a
+        # browser.
+        return if !browser
+
         browser.master.handle_job_result(
             self.class::Result.new( data.merge( job: self.clean_copy ) )
         )
@@ -117,7 +138,10 @@ class Job
     # @return   [Job]
     #   Copy of `self`
     def dup
-        self.class.new add_id( @options )
+        n = self.class.new( add_id( @options ) )
+        n.time = time
+        n.timed_out!( time ) if timed_out?
+        n
     end
 
     # @param    [Hash]  options
